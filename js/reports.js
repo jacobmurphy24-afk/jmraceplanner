@@ -185,7 +185,7 @@
         tabsBody],
       footer: [h('button', { class: 'btn btn-sm', onclick: function () { TP.printPlan(bid); } }, TP.icon('download'), 'Download plan (PDF)'),
                h('span', { class: 'grow' }),
-               h('button', { class: 'btn btn-sm', onclick: function () { m.close(); TP.eventForm(bid); } }, TP.icon('pencil'), 'Edit event'),
+               h('button', { class: 'btn btn-sm needs-edit', onclick: function () { m.close(); TP.eventForm(bid); } }, TP.icon('pencil'), 'Edit event'),
                h('button', { class: 'btn btn-primary btn-sm', onclick: function () { m.close(); } }, 'Close')] });
     drawChart(); tab(rb.status === 'In progress' ? 'Weeks' : 'Overview');
   };

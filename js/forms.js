@@ -74,12 +74,12 @@
         prioBox, typeBox,
         h('div', { class: 'form-section' }, 'On your calendar'), preview],
       footer: [
-        isEdit ? h('button', { class: 'btn btn-outline-danger', onclick: function () {
+        isEdit ? h('button', { class: 'btn btn-outline-danger needs-edit', onclick: function () {
           TP.confirm('Delete ' + TP.eventName(TP.state.events[id]) + '? Its sessions stay on the calendar, unassigned.', 'Delete', function () { m.close(); TP.deleteEvent(id); });
         } }, TP.icon('trash'), 'Delete') : null,
         h('span', { class: 'grow' }),
         h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Cancel'),
-        h('button', { class: 'btn btn-primary', onclick: save }, isEdit ? 'Save changes' : 'Add to calendar')] });
+        h('button', { class: 'btn btn-primary needs-edit', onclick: save }, isEdit ? 'Save changes' : 'Add to calendar')] });
     drawType();
 
     function save() {
@@ -133,10 +133,10 @@
         h('div', { class: 'md-sub' }, TP.fmt(s.date, '%A %d %B %Y') + (blockName(s.block_id) ? ' · ' + blockName(s.block_id) : ''))),
       body: [panel, notes ? [h('div', { class: 'form-section' }, 'Notes'), h('div', { class: 'notes' }, notes)] : null],
       footer: [
-        h('button', { class: 'btn btn-outline-danger', onclick: function () { TP.confirm('Delete this session?', 'Delete', function () { m.close(); TP.deleteSession(s.id); }); } }, TP.icon('trash'), 'Delete'),
+        h('button', { class: 'btn btn-outline-danger needs-edit', onclick: function () { TP.confirm('Delete this session?', 'Delete', function () { m.close(); TP.deleteSession(s.id); }); } }, TP.icon('trash'), 'Delete'),
         h('span', { class: 'grow' }),
         h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Close'),
-        h('button', { class: 'btn btn-primary', onclick: function () { TP.sessionForm(s.id); } }, TP.icon('pencil'), 'Edit')] });
+        h('button', { class: 'btn btn-primary needs-edit', onclick: function () { TP.sessionForm(s.id); } }, TP.icon('pencil'), 'Edit')] });
   };
 
   // =========================================================================

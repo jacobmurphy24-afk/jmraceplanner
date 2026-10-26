@@ -6,19 +6,34 @@
 
   TP.state = { events: {}, sessions: [], templates: {}, prefs: { units: 'metric', rpAxis: 'Time' } };
 
+  // The plan kept on this device (used when signed out, or when "This device" is the open plan).
   TP.load = function () {
     try {
       var raw = localStorage.getItem(KEY);
-      if (raw) TP.state = normalise(JSON.parse(raw));
+      TP.state = raw ? normalise(JSON.parse(raw)) : normalise({ prefs: TP.state.prefs });
     } catch (e) { console.warn('Could not read saved plan', e); }
   };
+  TP.localPlan = function () { try { return normalise(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return normalise({}); } };
+  // Every change goes through here. An online plan is written to the cloud; preferences
+  // (units, chart axis) always stay on this device.
   TP.save = function () {
-    try { localStorage.setItem(KEY, JSON.stringify(TP.state)); }
-    catch (e) { TP.toast && TP.toast('Could not save in this browser: ' + e.message, 'error'); }
-    listeners.forEach(function (f) { f(); });
+    try {
+      if (TP.cloud && TP.cloud.isActive()) {
+        TP.cloud.push();
+        var local = TP.localPlan(); local.prefs = TP.state.prefs;
+        localStorage.setItem(KEY, JSON.stringify(local));
+      } else localStorage.setItem(KEY, JSON.stringify(TP.state));
+    } catch (e) { TP.toast && TP.toast('Could not save: ' + e.message, 'error'); }
+    TP.changed();
   };
+  // Redraw after a change (also used when another person's edits arrive).
+  TP.changed = function () { listeners.forEach(function (f) { f(); }); };
   TP.onChange = function (f) { listeners.push(f); };
+  TP.offChange = function (f) { listeners = listeners.filter(function (x) { return x !== f; }); };
 
+  TP.normalise = normalise;
+  TP.normaliseSession = function (x) { return normaliseSession(x); };
+  TP.normaliseEvent = function (x) { return normaliseEvent(x); };
   function normalise(s) {
     s = s || {};
     var out = { events: s.events || {}, sessions: Array.isArray(s.sessions) ? s.sessions : [], templates: s.templates || {}, prefs: Object.assign({ units: 'metric', rpAxis: 'Time' }, s.prefs || {}) };

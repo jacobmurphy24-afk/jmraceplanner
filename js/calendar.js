@@ -148,7 +148,7 @@
     var evIds = []; TP.entriesOn(TP.schedule(), d).forEach(function (e) { if (evIds.indexOf(e.bid) < 0) evIds.push(e.bid); });
     root.appendChild(h('div', { class: 'day-head' },
       h('div', null, h('div', { class: 'lbl' }, 'Selected date'), h('div', { class: 'day-date' }, TP.fmt(d, '%a %d %b %Y'))),
-      h('div', { class: 'day-add' },
+      h('div', { class: 'day-add needs-edit' },
         h('button', { class: 'btn btn-primary btn-sm', onclick: function () { TP.eventForm(null, d); } }, TP.icon('plus'), 'Event'),
         h('button', { class: 'btn btn-soft btn-sm', onclick: function () { TP.sessionForm(null, { date: d }); } }, TP.icon('plus'), 'Session'))));
     if (ds.length) {
@@ -163,7 +163,7 @@
     if (ds.length || nWk || TP.clip.day || TP.clip.week) {
       root.appendChild(h('div', { class: 'side-section' }, 'Copy & paste'));
       var b = function (on, icon, label, fn) { return on ? h('button', { class: 'btn btn-soft btn-sm', onclick: fn }, TP.icon(icon), label) : null; };
-      root.appendChild(h('div', { class: 'copy-grid' },
+      root.appendChild(h('div', { class: 'copy-grid needs-edit' },
         b(ds.length > 0, 'copy', 'Copy day', function () { TP.clip.day = { date: d, sessions: ds.map(function (x) { return Object.assign({}, x); }) }; TP.render(); }),
         b(nWk > 0, 'copy', 'Copy week', function () { TP.clip.week = { start: wk, sessions: TP.sessionsBetween(wk, TP.addDays(wk, 6)).map(function (x) { return Object.assign({}, x); }) }; TP.render(); }),
         b(!!TP.clip.day, 'paste', 'Paste day', function () {
@@ -250,6 +250,6 @@
           h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'By sport'), bySport.length ? bySport : h('p', { class: 'muted' }, 'No sessions planned.')),
           h('div', { class: 'panel ws-charts' }, charts.filter(Boolean).length ? charts : h('p', { class: 'muted' }, 'Add sessions to see the breakdown.')))],
       footer: [h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Close'),
-               h('button', { class: 'btn btn-primary', onclick: function () { TP.sessionForm(null, { date: d, block_id: bid }); } }, 'Add session')] });
+               h('button', { class: 'btn btn-primary needs-edit', onclick: function () { TP.sessionForm(null, { date: d, block_id: bid }); } }, 'Add session')] });
   };
 })(window.TP);

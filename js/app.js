@@ -18,6 +18,7 @@
       main.appendChild(garminPlaceholder());
     }
     var sd = TP.clear(document.getElementById('side-day')); TP.renderDay(sd);
+    TP.renderAccount();
   };
 
   function garminPlaceholder() {
@@ -63,7 +64,8 @@
     var r = new FileReader();
     r.onload = function () {
       input.value = '';
-      TP.confirm('Replace the plan in this browser with \u201c' + f.name + '\u201d? Save your current plan first if you want to keep it.', 'Replace plan', function () {
+      var target = TP.cloud.isActive() ? 'the online plan \u201c' + TP.cloud.plan.name + '\u201d (for everyone in it)' : 'the plan in this browser';
+      TP.confirm('Replace ' + target + ' with \u201c' + f.name + '\u201d? Save your current plan first if you want to keep it.', 'Replace plan', function () {
         try { TP.importJSON(r.result); TP.save(); TP.applyUnits(); TP.toast('Plan loaded.'); }
         catch (e) { TP.toast(e.message, 'error'); }
       });
@@ -80,11 +82,13 @@
     document.querySelectorAll('[data-action=save-plan]').forEach(function (b) { b.addEventListener('click', TP.savePlan); });
     document.querySelectorAll('[data-action=load-plan]').forEach(function (b) { b.addEventListener('click', TP.loadPlan); });
     document.getElementById('plan-file').addEventListener('change', readPlanFile);
+    document.getElementById('top-plan').addEventListener('click', function () { TP.plansPanel(); });
     document.querySelectorAll('[data-action=add-event]').forEach(function (b) { b.addEventListener('click', function () { TP.closeMenu(); TP.eventForm(null, TP.view.selected); }); });
     document.querySelectorAll('[data-action=add-session]').forEach(function (b) { b.addEventListener('click', function () { TP.closeMenu(); TP.sessionForm(null, { date: TP.view.selected }); }); });
     // Phones open on the month view; the year view is easier to read on a wide screen.
     if (window.matchMedia('(max-width: 760px)').matches) TP.view.mode = 'Month';
     TP.onChange(TP.render);
+    TP.cloud.init();
     TP.render();
     TP.startUnits();
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () {});
