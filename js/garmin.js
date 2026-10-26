@@ -9,7 +9,7 @@
   var G = TP.garmin = { acts: [], loaded: false, syncing: null };
   var uid = null;
   // Storage names include the signed-in account, so two people using one device don't see each other's data.
-  function k(name) { return name + (uid ? ':' + uid : ''); }
+  function storeKey(name) { return name + (uid ? ':' + uid : ''); }
   function dbName() { return 'tp-garmin' + (uid ? '-' + uid : ''); }
 
   // --- Storage on this device (IndexedDB: activity summaries and their second-by-second streams) ---
@@ -41,7 +41,7 @@
   // Garmin data saved before accounts belonged to "this device": it moves to the first account that signs in here.
   function migrate() {
     if (!uid || !localStorage.getItem(KEY) && !localStorage.getItem(RANGE)) return Promise.resolve();
-    [KEY, TOKEN, RANGE].forEach(function (n) { var v = localStorage.getItem(n); if (v !== null && localStorage.getItem(k(n)) === null) localStorage.setItem(k(n), v); localStorage.removeItem(n); });
+    [KEY, TOKEN, RANGE].forEach(function (n) { var v = localStorage.getItem(n); if (v !== null && localStorage.getItem(storeKey(n)) === null) localStorage.setItem(storeKey(n), v); localStorage.removeItem(n); });
     return new Promise(function (res) {
       var r = indexedDB.open('tp-garmin', 1);
       r.onupgradeneeded = function () { r.result.createObjectStore('acts', { keyPath: 'id' }); r.result.createObjectStore('streams', { keyPath: 'id' }); };
@@ -65,12 +65,12 @@
   };
 
   // --- Connection ---
-  G.key = function () { try { return localStorage.getItem(k(KEY)) || ''; } catch (e) { return ''; } };
+  G.key = function () { try { return localStorage.getItem(storeKey(KEY)) || ''; } catch (e) { return ''; } };
   G.connected = function () { return !!G.key(); };
   function jwtExp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return Date.now() + 23 * 3600e3; } }
   // The key is swapped for an access token that lasts up to 24 hours; a new one is fetched when needed.
   function token(force) {
-    var c = null; try { c = JSON.parse(localStorage.getItem(k(TOKEN)) || 'null'); } catch (e) {}
+    var c = null; try { c = JSON.parse(localStorage.getItem(storeKey(TOKEN)) || 'null'); } catch (e) {}
     if (!force && c && c.exp > Date.now() + 60e3) return Promise.resolve(c.token);
     return fetch(RELAY + '/personalapitoken-service/personal-api/personal-api-key/token', { method: 'POST', headers: { Accept: '*/*', Authorization: 'ApiKey ' + G.key() } })
       .then(function (r) {
@@ -83,7 +83,7 @@
         var j = null; if (body.charAt(0) === '{') { try { j = JSON.parse(body); } catch (e) {} }
         var t = j ? (j.access_token || j.accessToken || j.token) : body.replace(/^"|"$/g, '');
         if (!t || t.split('.').length !== 3) throw new Error('Garmin’s reply didn’t include an access token. Try again in a minute.');
-        localStorage.setItem(k(TOKEN), JSON.stringify({ token: t, exp: j && j.expires_in ? Date.now() + j.expires_in * 1000 : jwtExp(t) }));
+        localStorage.setItem(storeKey(TOKEN), JSON.stringify({ token: t, exp: j && j.expires_in ? Date.now() + j.expires_in * 1000 : jwtExp(t) }));
         return t;
       });
   }
@@ -91,7 +91,7 @@
     return token(false).then(function (t) {
       return fetch(RELAY + path, { headers: { Authorization: 'Bearer ' + t, Accept: asBytes ? 'application/zip, application/x-zip-compressed, application/octet-stream' : 'application/json' } });
     }).then(function (r) {
-      if (r.status === 401 && !retried) { localStorage.removeItem(k(TOKEN)); return api(path, asBytes, true); }
+      if (r.status === 401 && !retried) { localStorage.removeItem(storeKey(TOKEN)); return api(path, asBytes, true); }
       if (r.status === 429) throw new Error('Garmin is limiting requests right now. Wait a few minutes and sync again – what’s already downloaded is kept.');
       if (!r.ok) throw new Error('Garmin returned an error (' + r.status + ') for ' + path.split('?')[0] + '.');
       // An empty reply means "nothing" (as in Garmin's own client), not an error.
@@ -101,10 +101,10 @@
   G.connect = function (key) {
     key = key.trim();
     if (key.length < 10) return Promise.reject(new Error('That doesn’t look like a complete API key.'));
-    localStorage.setItem(k(KEY), key); localStorage.removeItem(k(TOKEN));
-    return token(true).catch(function (e) { localStorage.removeItem(k(KEY)); throw e; });
+    localStorage.setItem(storeKey(KEY), key); localStorage.removeItem(storeKey(TOKEN));
+    return token(true).catch(function (e) { localStorage.removeItem(storeKey(KEY)); throw e; });
   };
-  G.disconnect = function () { localStorage.removeItem(k(KEY)); localStorage.removeItem(k(TOKEN)); TP.changed(); };
+  G.disconnect = function () { localStorage.removeItem(storeKey(KEY)); localStorage.removeItem(storeKey(TOKEN)); TP.changed(); };
   G.clearActs = function () {
     return Promise.all([tx('acts', 'readwrite', function (s) { s.clear(); }), tx('streams', 'readwrite', function (s) { s.clear(); })])
       .then(function () { G.acts = []; TP.changed(); });
@@ -188,7 +188,7 @@
   // Sync: list activities in the range, keep their summaries, then fetch each new FIT file.
   G.sync = function (from, to, withFit) {
     if (G.syncing) return G.syncing;
-    G.progress = 'Finding activities…'; TP.changed();
+    G.progress = 'Finding activities…';
     G.syncing = search(from, to).then(function (list) {
       var acts = list.map(summary), byId = {};
       G.acts.forEach(function (a) { byId[a.id] = a; });
@@ -212,6 +212,7 @@
       return r;
     }).catch(function (e) { TP.toast(e.message, 'error'); })
       .finally(function () { G.syncing = null; G.progress = ''; TP.changed(); });
+    TP.changed();   // now that a sync is under way: progress shows and the button reads "Syncing…"
     return G.syncing;
   };
 
@@ -259,13 +260,13 @@
   }
 
   function syncCard() {
-    var saved = {}; try { saved = JSON.parse(localStorage.getItem(k(RANGE)) || '{}'); } catch (e) {}
+    var saved = {}; try { saved = JSON.parse(localStorage.getItem(storeKey(RANGE)) || '{}'); } catch (e) {}
     var from = TP.input('date', saved.from || TP.addDays(TP.today(), -84)), to = TP.input('date', saved.to || TP.today());
     var fit = TP.input('checkbox', '', { checked: saved.fit !== false });
     var k = G.key();
     var btn = h('button', { class: 'btn btn-primary', disabled: !!G.syncing, onclick: function () {
       if (!from.value || !to.value || from.value > to.value) { TP.toast('Pick a start date before the end date.', 'warn'); return; }
-      localStorage.setItem(k(RANGE), JSON.stringify({ from: from.value, to: to.value, fit: fit.checked }));
+      localStorage.setItem(storeKey(RANGE), JSON.stringify({ from: from.value, to: to.value, fit: fit.checked }));
       G.sync(from.value, to.value, fit.checked);
     } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync from Garmin');
     return h('div', { class: 'panel' },
