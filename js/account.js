@@ -63,6 +63,100 @@
     setTimeout(function () { (mode === 'signup' ? name : email).focus(); }, 50);
   };
 
+  // ===========================================================================
+  // THE GATE: nothing in the app is reachable until you've signed in, and (the first time) set up a plan.
+  // ===========================================================================
+  var gateMode = 'signin';
+  // Returns true while the gate is showing. It only redraws when its screen changes, so typing isn't lost.
+  TP.renderGate = function () {
+    var gate = document.getElementById('gate');
+    var screen = !C.enabled ? '' : !C.ready ? 'loading' : !C.user ? gateMode : !C.plansLoaded ? 'plans' : C.needsStart ? 'start' : '';
+    document.body.classList.toggle('gated', !!screen);
+    var sig = screen + '|' + (C.user ? C.user.uid + C.user.verified + C.invites.length : '');
+    if (gate.dataset.sig === sig) return !!screen;
+    gate.dataset.sig = sig; TP.clear(gate);
+    if (!screen) return false;
+    var card = h('div', { class: 'gate-card' },
+      h('div', { class: 'gate-brand' }, h('div', { class: 'logo' }, TP.icon('activity')), h('div', null, h('div', { class: 'brand-t' }, 'Training Planner'), h('div', { class: 'brand-s' }, 'jmraceplanner.co.uk'))));
+    ({ loading: gateLoading, plans: gatePlans, start: gateStart, signin: gateAuth, signup: gateAuth, reset: gateAuth })[screen](card, screen);
+    gate.appendChild(card);
+    var first = card.querySelector('input'); if (first && window.matchMedia('(min-width: 761px)').matches) setTimeout(function () { first.focus(); }, 30);
+    return true;
+  };
+  function redraw(mode) { gateMode = mode; document.getElementById('gate').dataset.sig = ''; TP.renderGate(); }
+
+  function gateLoading(card) { card.appendChild(h('p', { class: 'gate-wait' }, 'Opening…')); }
+  function gatePlans(card) {
+    card.appendChild(h('p', { class: 'gate-wait' }, 'Loading your plans…'));
+    card.appendChild(h('p', { class: 'hint' }, 'The first time you sign in on a device this needs an internet connection; after that it also works offline.'));
+    card.appendChild(h('a', { href: '#', class: 'gate-link', onclick: function (e) { e.preventDefault(); C.signOut(); } }, 'Sign out'));
+  }
+
+  function gateAuth(card, mode) {
+    var title = { signin: 'Sign in', signup: 'Create your account', reset: 'Reset your password' }[mode];
+    var name = TP.input('text', '', { autocomplete: 'name', placeholder: 'e.g. Jacob Murphy' });
+    var email = TP.input('email', '', { autocomplete: 'email', inputmode: 'email', autocapitalize: 'off' });
+    var pass = TP.input('password', '', { autocomplete: mode === 'signup' ? 'new-password' : 'current-password' });
+    var go = h('button', { class: 'btn btn-primary gate-go', type: 'submit' }, { signin: 'Sign in', signup: 'Create account', reset: 'Send reset email' }[mode]);
+    var form = h('form', { onsubmit: function (e) {
+      e.preventDefault();
+      if (mode === 'signup' && !name.value.trim()) { TP.toast('Add your name so people you share with know who you are.', 'warn'); return; }
+      var p = mode === 'signup' ? C.signUp(name.value, email.value, pass.value)
+            : mode === 'reset' ? C.resetPassword(email.value).then(function () { TP.toast('Password reset email sent – check your inbox (and spam).'); redraw('signin'); })
+            : C.signIn(email.value, pass.value);
+      busy(go, p).then(function () { if (mode === 'signup') TP.toast('Account created. We’ve emailed you a link to confirm your address.'); }).catch(fail);
+    } },
+      mode === 'signup' ? TP.field('Your name', name) : null,
+      TP.field('Email', email),
+      mode !== 'reset' ? TP.field('Password', pass) : null,
+      mode === 'signup' ? h('p', { class: 'hint' }, 'At least 6 characters.') : null,
+      go);
+    card.appendChild(h('h1', { class: 'gate-title' }, title));
+    card.appendChild(h('p', { class: 'gate-sub' }, mode === 'reset' ? 'We’ll email you a link to choose a new password.' : 'Plan your race calendar and training blocks, share plans with the people you train with, and connect Garmin.'));
+    card.appendChild(form);
+    var link = function (label, m) { return h('a', { href: '#', class: 'gate-link', onclick: function (e) { e.preventDefault(); redraw(m); } }, label); };
+    card.appendChild(h('div', { class: 'gate-links' },
+      mode === 'signin' ? [link('Create an account', 'signup'), link('Forgot password?', 'reset')]
+      : mode === 'signup' ? link('Already have an account? Sign in', 'signin') : link('Back to sign in', 'signin')));
+  }
+
+  // First sign-in: start a plan (optionally from one saved on this device before accounts), or join one you were invited to.
+  function gateStart(card) {
+    var u = C.user, local = TP.localPlan(), nEv = Object.keys(local.events).length, nSe = local.sessions.length, hasLocal = nEv + nSe > 0;
+    card.appendChild(h('h1', { class: 'gate-title' }, 'Welcome' + (u.name ? ', ' + u.name.split(' ')[0] : '')));
+    card.appendChild(h('p', { class: 'gate-sub' }, 'Set up your training plan. It’s saved to your account, so it’s the same on every device you sign in on.'));
+    if (C.invites.length) {
+      card.appendChild(h('div', { class: 'form-section' }, 'You’ve been invited'));
+      C.invites.forEach(function (p) {
+        var owner = p.people && p.people[p.ownerId];
+        card.appendChild(h('div', { class: 'panel invite' }, h('div', { class: 'grow' }, h('div', { class: 'strong' }, p.name), h('div', { class: 'muted small' }, (owner ? owner.name : 'Someone') + ' · ' + ROLE_LABEL[p.inviteRoles[u.email]])),
+          h('button', { class: 'btn btn-sm btn-primary', onclick: function () { busy(this, C.accept(p.id)).then(function () { C.needsStart = false; TP.changed(); }).catch(fail); } }, 'Join')));
+      });
+      card.appendChild(h('div', { class: 'form-section' }, 'Or start your own plan'));
+    } else if (!u.verified) {
+      card.appendChild(h('div', { class: 'verify' },
+        h('div', null, 'Been invited to someone\u2019s plan? Confirm your email first using the link we sent to ' + u.email + ', then press the button.'),
+        h('div', { class: 'btn-row' },
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: function () {
+            busy(this, C.refreshVerified()).then(function (ok) { TP.toast(ok ? 'Email confirmed.' + (C.invites.length ? '' : ' No invitations yet.') : 'Not confirmed yet \u2013 click the link in the email, then try again.', ok ? 'info' : 'warn'); }).catch(fail);
+          } }, 'I\u2019ve confirmed my email'),
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: function () { C.resendVerification().then(function () { TP.toast('Email sent again.'); }).catch(fail); } }, 'Send it again'))));
+    }
+    var nm = TP.input('text', 'My plan', { placeholder: 'e.g. 2027 season' });
+    var copy = TP.input('checkbox', '', { checked: hasLocal });
+    var go = h('button', { class: 'btn btn-primary gate-go', type: 'submit' }, 'Create my plan');
+    card.appendChild(h('form', { onsubmit: function (e) {
+      e.preventDefault();
+      var withLocal = hasLocal && copy.checked;
+      busy(go, C.createPlan(nm.value || 'My plan', withLocal)).then(function () { if (withLocal) TP.clearLocalPlan(); }).catch(fail);
+    } },
+      TP.field('Plan name', nm),
+      hasLocal ? h('label', { class: 'check gate-check' }, copy, h('span', null, 'Copy the plan saved in this browser (' + nEv + ' events, ' + nSe + ' sessions) into it. It’s then removed from this browser.')) : null,
+      go));
+    card.appendChild(h('div', { class: 'gate-links' }, h('span', { class: 'muted small' }, 'Signed in as ' + u.email),
+      h('a', { href: '#', class: 'gate-link', onclick: function (e) { e.preventDefault(); C.signOut(); } }, 'Sign out')));
+  }
+
   // --- Plans & sharing ---
   TP.plansPanel = function () {
     if (!C.enabled) return;
@@ -113,7 +207,6 @@
     out.appendChild(h('div', { class: 'form-section' }, 'Your plans'));
     var list = h('div', { class: 'plan-list' });
     var local = TP.localPlan(), nLocal = local.sessions.length + Object.keys(local.events).length;
-    list.appendChild(planRow('This device', 'Only on this device, not shared · ' + Object.keys(local.events).length + ' events, ' + local.sessions.length + ' sessions', !C.isActive(), function () { C.openLocal(); }));
     C.plans.forEach(function (p) {
       var others = p.memberIds.length - 1;
       list.appendChild(planRow(p.name, ROLE_LABEL[p.roles[u.uid]] + (others ? ' · shared with ' + others : ' · just you'), p.id === C.activeId, function () { C.open(p.id); }));
@@ -121,7 +214,7 @@
     out.appendChild(list);
     out.appendChild(h('div', { class: 'btn-row', style: 'margin-top:8px' },
       h('button', { class: 'btn btn-sm', onclick: function () { newPlan(false); } }, TP.icon('plus'), 'New empty plan'),
-      nLocal ? h('button', { class: 'btn btn-sm', onclick: function () { newPlan(true); } }, TP.icon('copy'), 'Put this device’s plan online') : null));
+      nLocal ? h('button', { class: 'btn btn-sm', onclick: function () { newPlan(true); } }, TP.icon('copy'), 'Copy this device’s old plan into a new plan') : null));
 
     // The open plan's people
     if (C.isActive()) out.appendChild(sharing(m));
@@ -137,11 +230,11 @@
   function newPlan(copyLocal) {
     var nm = TP.input('text', copyLocal ? 'My plan' : '', { placeholder: 'e.g. 2027 season' });
     var t = TP.modal({ size: 's', stack: true, title: copyLocal ? 'Put this device’s plan online' : 'New plan',
-      body: [TP.field('Plan name', nm), copyLocal ? h('p', { class: 'hint' }, 'Copies every event, session and template from this device into a new online plan you can share. This device’s copy stays as it is.') : null],
+      body: [TP.field('Plan name', nm), copyLocal ? h('p', { class: 'hint' }, 'Copies every event, session and template from this device into a new online plan you can share. The old copy is then removed from this device.') : null],
       footer: [h('button', { class: 'btn', onclick: function () { t.close(); } }, 'Cancel'),
                h('button', { class: 'btn btn-primary', onclick: function () {
                  if (!nm.value.trim()) return;
-                 busy(this, C.createPlan(nm.value, copyLocal)).then(function () { t.close(); }).catch(fail);
+                 busy(this, C.createPlan(nm.value, copyLocal)).then(function () { if (copyLocal) TP.clearLocalPlan(); t.close(); }).catch(fail);
                } }, 'Create')] });
     setTimeout(function () { nm.focus(); }, 50);
   }

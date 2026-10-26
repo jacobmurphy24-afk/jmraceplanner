@@ -1,17 +1,22 @@
 // Garmin: connect with a Garmin Connect Personal API key, sync activities (summaries + FIT files)
-// into this device's storage, and show them. The key stays on this device. Requests go through the
-// site's relay (garmin-relay/), because Garmin doesn't accept them straight from a web page.
+// into this device's storage, and show them. The key and activities are kept on this device, separately
+// for each account that signs in on it. Requests go through the site's relay (garmin-relay/), because
+// Garmin doesn't accept them straight from a web page.
 (function (TP) {
   var h = TP.h;
   var RELAY = 'https://garmin.jmraceplanner.co.uk';
   var KEY = 'tp-garmin-key', TOKEN = 'tp-garmin-token', RANGE = 'tp-garmin-range';
   var G = TP.garmin = { acts: [], loaded: false, syncing: null };
+  var uid = null;
+  // Storage names include the signed-in account, so two people using one device don't see each other's data.
+  function k(name) { return name + (uid ? ':' + uid : ''); }
+  function dbName() { return 'tp-garmin' + (uid ? '-' + uid : ''); }
 
   // --- Storage on this device (IndexedDB: activity summaries and their second-by-second streams) ---
   var dbp = null;
   function db() {
     if (!dbp) dbp = new Promise(function (res, rej) {
-      var r = indexedDB.open('tp-garmin', 1);
+      var r = indexedDB.open(dbName(), 1);
       r.onupgradeneeded = function () { r.result.createObjectStore('acts', { keyPath: 'id' }); r.result.createObjectStore('streams', { keyPath: 'id' }); };
       r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
     });
@@ -27,6 +32,32 @@
   function putStream(st) { return tx('streams', 'readwrite', function (s) { s.put(st); }); }
   G.stream = function (id) { return tx('streams', 'readonly', function (s) { return s.get(id); }); };
   function hasStream(id) { return tx('streams', 'readonly', function (s) { return s.getKey(id); }).then(function (k) { return k !== undefined; }); }
+  // Called when someone signs in or out (or at start-up without accounts).
+  G.setUser = function (id) {
+    uid = id || null; dbp = null; G.acts = []; G.loaded = false; G.syncing = null; G.progress = '';
+    if (TP.cloud && TP.cloud.enabled && !uid) { TP.changed(); return; }
+    migrate().then(G.load);
+  };
+  // Garmin data saved before accounts belonged to "this device": it moves to the first account that signs in here.
+  function migrate() {
+    if (!uid || !localStorage.getItem(KEY) && !localStorage.getItem(RANGE)) return Promise.resolve();
+    [KEY, TOKEN, RANGE].forEach(function (n) { var v = localStorage.getItem(n); if (v !== null && localStorage.getItem(k(n)) === null) localStorage.setItem(k(n), v); localStorage.removeItem(n); });
+    return new Promise(function (res) {
+      var r = indexedDB.open('tp-garmin', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('acts', { keyPath: 'id' }); r.result.createObjectStore('streams', { keyPath: 'id' }); };
+      r.onerror = function () { res(); };
+      r.onsuccess = function () {
+        var old = r.result, t = old.transaction(['acts', 'streams'], 'readonly'), got = {};
+        ['acts', 'streams'].forEach(function (st) { var q = t.objectStore(st).getAll(); q.onsuccess = function () { got[st] = q.result || []; }; });
+        t.oncomplete = function () {
+          old.close();
+          tx('acts', 'readwrite', function (s) { got.acts.forEach(function (a) { s.put(a); }); })
+            .then(function () { return tx('streams', 'readwrite', function (s) { got.streams.forEach(function (x) { s.put(x); }); }); })
+            .then(function () { indexedDB.deleteDatabase('tp-garmin'); res(); }, function () { res(); });
+        };
+      };
+    });
+  }
   G.load = function () {
     return tx('acts', 'readonly', function (s) { return s.getAll(); }).then(function (all) {
       G.acts = (all || []).sort(function (a, b) { return a.start < b.start ? 1 : -1; }); G.loaded = true; TP.changed();
@@ -34,12 +65,12 @@
   };
 
   // --- Connection ---
-  G.key = function () { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } };
+  G.key = function () { try { return localStorage.getItem(k(KEY)) || ''; } catch (e) { return ''; } };
   G.connected = function () { return !!G.key(); };
   function jwtExp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return Date.now() + 23 * 3600e3; } }
   // The key is swapped for an access token that lasts up to 24 hours; a new one is fetched when needed.
   function token(force) {
-    var c = null; try { c = JSON.parse(localStorage.getItem(TOKEN) || 'null'); } catch (e) {}
+    var c = null; try { c = JSON.parse(localStorage.getItem(k(TOKEN)) || 'null'); } catch (e) {}
     if (!force && c && c.exp > Date.now() + 60e3) return Promise.resolve(c.token);
     return fetch(RELAY + '/personalapitoken-service/personal-api/personal-api-key/token', { method: 'POST', headers: { Authorization: 'ApiKey ' + G.key() } })
       .then(function (r) {
@@ -49,7 +80,7 @@
       }).then(function (j) {
         var t = j.access_token || j.accessToken || j.token;
         if (!t) throw new Error('Garmin’s reply didn’t include an access token.');
-        localStorage.setItem(TOKEN, JSON.stringify({ token: t, exp: j.expires_in ? Date.now() + j.expires_in * 1000 : jwtExp(t) }));
+        localStorage.setItem(k(TOKEN), JSON.stringify({ token: t, exp: j.expires_in ? Date.now() + j.expires_in * 1000 : jwtExp(t) }));
         return t;
       });
   }
@@ -57,7 +88,7 @@
     return token(false).then(function (t) {
       return fetch(RELAY + path, { headers: { Authorization: 'Bearer ' + t, Accept: asBytes ? '*/*' : 'application/json' } });
     }).then(function (r) {
-      if (r.status === 401 && !retried) { localStorage.removeItem(TOKEN); return api(path, asBytes, true); }
+      if (r.status === 401 && !retried) { localStorage.removeItem(k(TOKEN)); return api(path, asBytes, true); }
       if (r.status === 429) throw new Error('Garmin is limiting requests right now. Wait a few minutes and sync again – what’s already downloaded is kept.');
       if (!r.ok) throw new Error('Garmin returned an error (' + r.status + ') for ' + path.split('?')[0] + '.');
       return asBytes ? r.arrayBuffer() : r.json();
@@ -66,10 +97,10 @@
   G.connect = function (key) {
     key = key.trim();
     if (key.length < 10) return Promise.reject(new Error('That doesn’t look like a complete API key.'));
-    localStorage.setItem(KEY, key); localStorage.removeItem(TOKEN);
-    return token(true).catch(function (e) { localStorage.removeItem(KEY); throw e; });
+    localStorage.setItem(k(KEY), key); localStorage.removeItem(k(TOKEN));
+    return token(true).catch(function (e) { localStorage.removeItem(k(KEY)); throw e; });
   };
-  G.disconnect = function () { localStorage.removeItem(KEY); localStorage.removeItem(TOKEN); TP.changed(); };
+  G.disconnect = function () { localStorage.removeItem(k(KEY)); localStorage.removeItem(k(TOKEN)); TP.changed(); };
   G.clearActs = function () {
     return Promise.all([tx('acts', 'readwrite', function (s) { s.clear(); }), tx('streams', 'readwrite', function (s) { s.clear(); })])
       .then(function () { G.acts = []; TP.changed(); });
@@ -224,13 +255,13 @@
   }
 
   function syncCard() {
-    var saved = {}; try { saved = JSON.parse(localStorage.getItem(RANGE) || '{}'); } catch (e) {}
+    var saved = {}; try { saved = JSON.parse(localStorage.getItem(k(RANGE)) || '{}'); } catch (e) {}
     var from = TP.input('date', saved.from || TP.addDays(TP.today(), -84)), to = TP.input('date', saved.to || TP.today());
     var fit = TP.input('checkbox', '', { checked: saved.fit !== false });
     var k = G.key();
     var btn = h('button', { class: 'btn btn-primary', disabled: !!G.syncing, onclick: function () {
       if (!from.value || !to.value || from.value > to.value) { TP.toast('Pick a start date before the end date.', 'warn'); return; }
-      localStorage.setItem(RANGE, JSON.stringify({ from: from.value, to: to.value, fit: fit.checked }));
+      localStorage.setItem(k(RANGE), JSON.stringify({ from: from.value, to: to.value, fit: fit.checked }));
       G.sync(from.value, to.value, fit.checked);
     } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync from Garmin');
     return h('div', { class: 'panel' },

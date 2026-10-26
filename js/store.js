@@ -13,13 +13,15 @@
       TP.state = raw ? normalise(JSON.parse(raw)) : normalise({ prefs: TP.state.prefs });
     } catch (e) { console.warn('Could not read saved plan', e); }
   };
+  // A plan saved on this device before accounts (offered once, at first sign-in, to copy into the account).
+  TP.clearLocalPlan = function () { var l = TP.localPlan(); localStorage.setItem(KEY, JSON.stringify(normalise({ prefs: l.prefs }))); };
   TP.localPlan = function () { try { return normalise(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return normalise({}); } };
-  // Every change goes through here. An online plan is written to the cloud; preferences
-  // (units, chart axis) always stay on this device.
+  // Every change goes through here. With accounts on, the open plan is written to the cloud and only
+  // preferences (units, chart axis) are kept on this device; without them, the whole plan is.
   TP.save = function () {
     try {
-      if (TP.cloud && TP.cloud.isActive()) {
-        TP.cloud.push();
+      if (TP.cloud && TP.cloud.enabled) {
+        if (TP.cloud.isActive()) TP.cloud.push();
         var local = TP.localPlan(); local.prefs = TP.state.prefs;
         localStorage.setItem(KEY, JSON.stringify(local));
       } else localStorage.setItem(KEY, JSON.stringify(TP.state));

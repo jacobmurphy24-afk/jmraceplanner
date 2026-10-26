@@ -3,6 +3,7 @@
   var h = TP.h;
 
   TP.render = function () {
+    if (TP.renderGate()) return;
     var v = TP.view, main = TP.clear(document.getElementById('main'));
     document.querySelectorAll('[data-page]').forEach(function (b) { b.classList.toggle('on', b.dataset.page === v.page); b.setAttribute('aria-current', b.dataset.page === v.page ? 'page' : 'false'); });
     document.querySelectorAll('[data-mode]').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === v.mode); });
@@ -83,9 +84,25 @@
     if (window.matchMedia('(max-width: 760px)').matches) TP.view.mode = 'Month';
     TP.onChange(TP.render);
     TP.cloud.init();
-    TP.garmin.load();
+    if (!TP.cloud.enabled) TP.garmin.setUser(null);   // no accounts configured: this device's Garmin data
     TP.render();
     TP.startUnits();
-    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () {});
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+      // When an update takes over from the version already running, reload once to show it,
+      // unless a form is open, so nothing being typed is lost.
+      var hadVersion = !!navigator.serviceWorker.controller, reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadVersion || reloaded) return;
+        reloaded = true;
+        if (document.body.classList.contains('md-open')) TP.toast('A new version is ready – it’ll show next time you open the app.');
+        else location.reload();
+      });
+      navigator.serviceWorker.register('sw.js').then(function (r) {
+        r.update();
+        // Phones often resume the app from the background instead of reopening it: check for an
+        // update then too (a new version takes over and the page reloads, as above).
+        document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') r.update().catch(function () {}); });
+      }).catch(function () {});
+    }
   });
 })(window.TP);

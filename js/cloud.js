@@ -1,12 +1,13 @@
-// Accounts and shared plans (Firebase). Signed out, the app works exactly as before with the plan kept
-// on this device. Signed in, you can open plans stored online; changes sync live to everyone in the plan
-// and keep working offline (they upload when you're back online).
+// Accounts and shared plans (Firebase). You sign in before using the app; every plan belongs to an
+// account and is stored online, syncs live to everyone in it, and keeps working offline (changes upload
+// when you're back online). Without a Firebase project configured, the app runs on this device only.
 (function (TP) {
   var F = window.FB, cfg = window.TP_FIREBASE_CONFIG;
   var COLLS = ['events', 'sessions', 'templates'];
   var auth, db, unsubPlans = null, unsubInvites = null, unsubContent = [];
   var C = TP.cloud = {
-    enabled: false, user: null, plans: [], invites: [], activeId: null, plan: null, synced: true,
+    enabled: false, ready: false, user: null, plans: [], invites: [], activeId: null, plan: null, synced: true,
+    plansLoaded: false, needsStart: false,
     isActive: function () { return !!C.activeId && !!C.plan; },
     role: function () { return C.plan && C.user ? C.plan.roles[C.user.uid] : null; },
     canEdit: function () { return !C.isActive() || ['owner', 'editor'].indexOf(C.role()) >= 0; }
@@ -41,9 +42,13 @@
     C.enabled = true;
     F.onAuthStateChanged(auth, function (u) {
       stopAll();
+      C.activeId = null; C.plan = null; C.plansLoaded = false; C.needsStart = false;
+      TP.state = TP.normalise({ prefs: TP.state.prefs });
+      document.body.classList.remove('readonly');
       C.user = u ? { uid: u.uid, email: (u.email || '').toLowerCase(), name: u.displayName || '', verified: u.emailVerified } : null;
-      if (C.user) { listenPlans(); var saved = localStorage.getItem(activeKey()); if (saved) C.open(saved, true); }
-      else { C.activeId = null; C.plan = null; TP.load(); }
+      C.ready = true;
+      if (TP.garmin) TP.garmin.setUser(C.user ? C.user.uid : null);
+      if (C.user) listenPlans();
       TP.changed();
     });
   };
@@ -56,21 +61,31 @@
 
   function listenPlans() {
     var uid = C.user.uid;
-    unsubPlans = F.onSnapshot(F.query(F.collection(db, 'plans'), F.where('memberIds', 'array-contains', uid)), function (snap) {
+    // includeMetadataChanges: also hear when the server confirms what the device cache said (e.g. "no plans yet").
+    unsubPlans = F.onSnapshot(F.query(F.collection(db, 'plans'), F.where('memberIds', 'array-contains', uid)), { includeMetadataChanges: true }, function (snap) {
       C.plans = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); }).sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
+      // Offline on a device that has never loaded this account's plans: wait for the server.
+      if (snap.metadata.fromCache && !snap.docs.length && !C.plansLoaded) return;
+      C.plansLoaded = true;
       if (C.activeId) {
         C.plan = C.plans.filter(function (p) { return p.id === C.activeId; })[0] || null;
-        // Removed from the plan (or it was deleted): fall back to this device's plan.
-        if (!C.plan && !snap.metadata.fromCache) { TP.toast('You no longer have access to that plan.', 'warn'); C.openLocal(); }
-      }
+        // Removed from the plan (or it was deleted): open another one.
+        if (!C.plan && !snap.metadata.fromCache) { TP.toast('You no longer have access to that plan.', 'warn'); C.closePlan(); }
+      } else C.pickPlan();
       document.body.classList.toggle('readonly', !C.canEdit());
       TP.changed();
     }, function (e) { console.warn('plans', e); });
-    // Invites need a verified email (see firestore.rules).
-    if (C.user.verified) unsubInvites = F.onSnapshot(F.query(F.collection(db, 'plans'), F.where('inviteEmails', 'array-contains', C.user.email)), function (snap) {
-      C.invites = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
-      TP.changed();
-    }, function (e) { console.warn('invites', e); });
+    // Invites need a verified email (see firestore.rules). The sign-in token can still say "unverified" for
+    // up to an hour after confirming, so refresh it first when the two disagree.
+    if (!C.user.verified) return;
+    var u = auth.currentUser;
+    u.getIdTokenResult().then(function (t) { return t.claims.email_verified ? null : u.getIdToken(true); }).catch(function () {}).then(function () {
+      if (!C.user || C.user.uid !== uid || unsubInvites) return;
+      unsubInvites = F.onSnapshot(F.query(F.collection(db, 'plans'), F.where('inviteEmails', 'array-contains', C.user.email)), function (snap) {
+        C.invites = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        TP.changed();
+      }, function (e) { console.warn('invites', e); });
+    });
   }
 
   // --- Opening a plan ---
@@ -96,18 +111,28 @@
         TP.changed();
       }, function (e) {
         console.warn(coll, e);
-        if (e.code === 'permission-denied') { TP.toast('You no longer have access to that plan.', 'warn'); C.openLocal(); }
+        if (e.code === 'permission-denied' && C.activeId === id) { TP.toast('You no longer have access to that plan.', 'warn'); C.closePlan(); }
       }));
     });
     document.body.classList.toggle('readonly', !C.canEdit());
     if (!quiet) TP.toast('Opened “' + (C.plan ? C.plan.name : 'plan') + '”.');
     TP.changed();
   };
-  C.openLocal = function () {
+  // Open the plan used last on this device, or the first one; with none yet, ask how to start.
+  C.pickPlan = function (exclude) {
+    if (C.creating) return;                    // createPlan opens the new plan itself
+    var plans = C.plans.filter(function (p) { return p.id !== exclude; }), saved = localStorage.getItem(activeKey());
+    var target = plans.filter(function (p) { return p.id === saved; })[0] || plans[0];
+    C.needsStart = !target;
+    if (target) C.open(target.id, true); else TP.changed();
+  };
+  C.closePlan = function (exclude) {
+    var was = C.activeId;
     stopContent(); C.activeId = null; C.plan = null;
-    if (C.user) localStorage.removeItem(activeKey());
+    localStorage.removeItem(activeKey());
+    TP.state = TP.normalise({ prefs: TP.state.prefs });
     document.body.classList.remove('readonly');
-    TP.load(); TP.changed();
+    C.pickPlan(exclude || was);
   };
   function put(coll, key, obj) {
     if (coll === 'events') TP.state.events[key] = obj;
@@ -200,6 +225,7 @@
   // A new online plan, optionally starting with a copy of this device's plan.
   C.createPlan = function (name, copyLocal) {
     var ref = F.doc(F.collection(db, 'plans')), uid = C.user.uid, roles = {}; roles[uid] = 'owner';
+    C.creating = true;
     return F.setDoc(ref, { name: name.trim().slice(0, 80) || 'My plan', ownerId: uid, memberIds: [uid], roles: roles, people: me(),
       inviteEmails: [], inviteRoles: {}, createdAt: F.serverTimestamp(), updatedAt: F.serverTimestamp() })
       .then(function () {
@@ -210,7 +236,11 @@
         Object.keys(local.templates).forEach(function (n) { ops.push({ set: true, coll: 'templates', id: tplId(n), data: Object.assign(clean(local.templates[n]), { _name: n }) }); });
         return writeOps(ref.id, ops);
       })
-      .then(function () { C.plans = C.plans.concat([{ id: ref.id, name: name, roles: roles, memberIds: [uid], people: me(), inviteEmails: [], inviteRoles: {}, ownerId: uid }]); C.open(ref.id); return ref.id; });
+      .then(function () {
+        C.creating = false; C.needsStart = false;
+        C.plans = C.plans.concat([{ id: ref.id, name: name, roles: roles, memberIds: [uid], people: me(), inviteEmails: [], inviteRoles: {}, ownerId: uid }]);
+        C.open(ref.id, true); return ref.id;
+      }, function (e) { C.creating = false; throw e; });
   };
   function planRef(id) { return F.doc(db, 'plans', id || C.activeId); }
   function planData(id) { return C.plans.concat(C.invites).filter(function (p) { return p.id === id; })[0]; }
@@ -220,7 +250,7 @@
     return Promise.all(COLLS.map(function (coll) { return F.getDocs(F.collection(db, 'plans', id, coll)); })).then(function (snaps) {
       var ops = [];
       snaps.forEach(function (s, i) { s.docs.forEach(function (d) { ops.push({ set: false, coll: COLLS[i], id: d.id }); }); });
-      if (id === C.activeId) C.openLocal();
+      if (id === C.activeId) C.closePlan(id);
       return writeOps(id, ops);
     }).then(function () { return F.deleteDoc(planRef(id)); });
   };
@@ -255,7 +285,7 @@
   };
   C.leave = function (id) {
     var p = planData(id), uid = C.user.uid, r = Object.assign({}, p.roles), pe = Object.assign({}, p.people); delete r[uid]; delete pe[uid];
-    if (id === C.activeId) C.openLocal();
+    if (id === C.activeId) C.closePlan(id);
     return F.updateDoc(planRef(id), { memberIds: p.memberIds.filter(function (x) { return x !== uid; }), roles: r, people: pe, updatedAt: F.serverTimestamp() });
   };
 
