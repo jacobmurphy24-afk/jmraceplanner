@@ -93,6 +93,19 @@
       unit ? TP.h('span', { class: 'unit-wrap', 'data-unit': unit }, input) : input);
   };
   TP.input = function (type, value, attrs) { return TP.h('input', Object.assign({ type: type, value: value == null ? '' : value, class: 'inp' }, attrs || {})); };
+  // A password-style box with a Show / Hide button. Returns the wrapper; keep using the input itself for its value.
+  TP.revealable = function (input, what) {
+    var btn = TP.h('button', { type: 'button', class: 'reveal', 'aria-pressed': 'false', 'aria-label': 'Show ' + (what || 'password') }, 'Show');
+    btn.addEventListener('mousedown', function (e) { e.preventDefault(); });   // keep the cursor in the box
+    btn.addEventListener('click', function () {
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Hide' : 'Show';
+      btn.setAttribute('aria-pressed', String(show));
+      btn.setAttribute('aria-label', (show ? 'Hide ' : 'Show ') + (what || 'password'));
+    });
+    return TP.h('span', { class: 'reveal-wrap' }, input, btn);
+  };
   TP.selectEl = function (options, selected, attrs) {
     return TP.h('select', Object.assign({ class: 'inp' }, attrs || {}), options.map(function (o) {
       var v = typeof o === 'object' ? o.value : o, l = typeof o === 'object' ? o.label : o;

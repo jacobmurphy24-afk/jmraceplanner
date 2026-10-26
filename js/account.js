@@ -48,7 +48,7 @@
         h('div', { class: 'md-sub' }, 'Your account lets you keep plans online and share them with other people.')),
       body: [
         mode === 'signup' ? TP.field('Your name', name) : null,
-        TP.field('Email', email), TP.field('Password', pass),
+        TP.field('Email', email), TP.field('Password', TP.revealable(pass)),
         mode === 'signup' ? h('p', { class: 'hint' }, 'At least 6 characters. You’ll get an email to confirm your address; you need to confirm it before you can join plans shared with you.') : null,
         h('div', { class: 'auth-links' },
           mode === 'signup'
@@ -108,7 +108,7 @@
     } },
       mode === 'signup' ? TP.field('Your name', name) : null,
       TP.field('Email', email),
-      mode !== 'reset' ? TP.field('Password', pass) : null,
+      mode !== 'reset' ? TP.field('Password', TP.revealable(pass)) : null,
       mode === 'signup' ? h('p', { class: 'hint' }, 'At least 6 characters.') : null,
       go);
     card.appendChild(h('h1', { class: 'gate-title' }, title));

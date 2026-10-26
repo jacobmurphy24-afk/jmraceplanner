@@ -5,8 +5,8 @@
   TP.render = function () {
     if (TP.renderGate()) return;
     var v = TP.view, main = TP.clear(document.getElementById('main'));
-    document.querySelectorAll('[data-page]').forEach(function (b) { b.classList.toggle('on', b.dataset.page === v.page); b.setAttribute('aria-current', b.dataset.page === v.page ? 'page' : 'false'); });
-    document.querySelectorAll('[data-mode]').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === v.mode); });
+    document.querySelectorAll('button[data-page]').forEach(function (b) { b.classList.toggle('on', b.dataset.page === v.page); b.setAttribute('aria-current', b.dataset.page === v.page ? 'page' : 'false'); });
+    document.querySelectorAll('button[data-mode]').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === v.mode); });
     document.body.dataset.page = v.page;
     if (v.page === 'calendar') {
       var cal = h('div', { class: 'cal cal-' + v.mode.toLowerCase() });
@@ -71,8 +71,8 @@
   // --- Start ---
   document.addEventListener('DOMContentLoaded', function () {
     TP.load();
-    document.querySelectorAll('[data-page]').forEach(function (b) { b.addEventListener('click', function () { TP.go(b.dataset.page); }); });
-    document.querySelectorAll('[data-mode]').forEach(function (b) { b.addEventListener('click', function () { TP.setMode(b.dataset.mode); }); });
+    document.querySelectorAll('button[data-page]').forEach(function (b) { b.addEventListener('click', function () { TP.go(b.dataset.page); }); });
+    document.querySelectorAll('button[data-mode]').forEach(function (b) { b.addEventListener('click', function () { TP.setMode(b.dataset.mode); }); });
     document.querySelectorAll('[data-action=settings]').forEach(function (b) { b.addEventListener('click', function () { TP.closeMenu(); TP.settings(); }); });
     document.querySelectorAll('[data-action=save-plan]').forEach(function (b) { b.addEventListener('click', TP.savePlan); });
     document.querySelectorAll('[data-action=load-plan]').forEach(function (b) { b.addEventListener('click', TP.loadPlan); });

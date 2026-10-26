@@ -248,7 +248,7 @@
         step(3, [h('b', null, 'Choose how long it lasts. '), '1 year is easiest. Garmin emails you about a week before it expires, and you can make a new one the same way.']),
         step(4, [h('b', null, 'Copy the key straight away. '), 'Garmin shows it only once. If you lose it, delete it on that page and create a new one.']),
         step(5, [h('b', null, 'Paste it below and press Connect.')])),
-      h('div', { class: 'key-row' }, key, go),
+      h('div', { class: 'key-row' }, TP.revealable(key, 'API key'), go),
       h('p', { class: 'hint' }, 'Treat the key like a password. It’s kept only in this browser on this device and is never added to your plan or account, so connect each device separately. ' +
         'Requests pass through this site’s relay because Garmin doesn’t accept them straight from a web page; the relay doesn’t store anything. ' +
         'The personal API is for your own data only, and it’s read-only: nothing on your Garmin account can be changed from here.'));
