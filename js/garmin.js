@@ -72,26 +72,30 @@
   function token(force) {
     var c = null; try { c = JSON.parse(localStorage.getItem(k(TOKEN)) || 'null'); } catch (e) {}
     if (!force && c && c.exp > Date.now() + 60e3) return Promise.resolve(c.token);
-    return fetch(RELAY + '/personalapitoken-service/personal-api/personal-api-key/token', { method: 'POST', headers: { Authorization: 'ApiKey ' + G.key() } })
+    return fetch(RELAY + '/personalapitoken-service/personal-api/personal-api-key/token', { method: 'POST', headers: { Accept: '*/*', Authorization: 'ApiKey ' + G.key() } })
       .then(function (r) {
         if (r.status === 401 || r.status === 403) throw new Error('Garmin didn’t accept that API key. Check it was copied in full and hasn’t expired or been deleted.');
         if (!r.ok) throw new Error('Garmin returned an error (' + r.status + '). Try again in a minute.');
-        return r.json();
-      }).then(function (j) {
-        var t = j.access_token || j.accessToken || j.token;
-        if (!t) throw new Error('Garmin’s reply didn’t include an access token.');
-        localStorage.setItem(k(TOKEN), JSON.stringify({ token: t, exp: j.expires_in ? Date.now() + j.expires_in * 1000 : jwtExp(t) }));
+        return r.text();
+      }).then(function (body) {
+        // Garmin replies with the token itself as plain text (a JWT); accept JSON too, just in case.
+        body = (body || '').trim();
+        var j = null; if (body.charAt(0) === '{') { try { j = JSON.parse(body); } catch (e) {} }
+        var t = j ? (j.access_token || j.accessToken || j.token) : body.replace(/^"|"$/g, '');
+        if (!t || t.split('.').length !== 3) throw new Error('Garmin’s reply didn’t include an access token. Try again in a minute.');
+        localStorage.setItem(k(TOKEN), JSON.stringify({ token: t, exp: j && j.expires_in ? Date.now() + j.expires_in * 1000 : jwtExp(t) }));
         return t;
       });
   }
   function api(path, asBytes, retried) {
     return token(false).then(function (t) {
-      return fetch(RELAY + path, { headers: { Authorization: 'Bearer ' + t, Accept: asBytes ? '*/*' : 'application/json' } });
+      return fetch(RELAY + path, { headers: { Authorization: 'Bearer ' + t, Accept: asBytes ? 'application/zip, application/x-zip-compressed, application/octet-stream' : 'application/json' } });
     }).then(function (r) {
       if (r.status === 401 && !retried) { localStorage.removeItem(k(TOKEN)); return api(path, asBytes, true); }
       if (r.status === 429) throw new Error('Garmin is limiting requests right now. Wait a few minutes and sync again – what’s already downloaded is kept.');
       if (!r.ok) throw new Error('Garmin returned an error (' + r.status + ') for ' + path.split('?')[0] + '.');
-      return asBytes ? r.arrayBuffer() : r.json();
+      // An empty reply means "nothing" (as in Garmin's own client), not an error.
+      return asBytes ? r.arrayBuffer() : r.text().then(function (x) { return x.trim() ? JSON.parse(x) : null; });
     });
   }
   G.connect = function (key) {
