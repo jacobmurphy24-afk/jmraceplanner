@@ -293,6 +293,21 @@ body.md-open { overflow: hidden; }
 /* View-only members: hide everything that changes the plan. */
 body.readonly .needs-edit, body.readonly [data-action=add-event], body.readonly [data-action=add-session], body.readonly [data-action=load-plan] { display: none !important; }
 
+
+/* --- Garmin --- */
+.steps-list { list-style: none; padding: 0; margin: 10px 0 14px; display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem; }
+.steps-list li { display: flex; gap: 10px; align-items: flex-start; }
+.steps-list a { color: var(--accent); font-weight: 600; word-break: break-all; }
+.step-n { flex: 0 0 24px; height: 24px; border-radius: 50%; background: var(--ink); color: #fff; font-weight: 800; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; }
+.key-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.sync-row { display: grid; grid-template-columns: 160px 160px 1fr auto; gap: 12px; align-items: end; margin-top: 12px; }
+.sync-row .check { min-height: 38px; font-weight: 500; font-size: 0.82rem; }
+.sync-progress { margin-top: 10px; font-size: 0.84rem; font-weight: 700; color: var(--accent-d); }
+.nowrap { white-space: nowrap; }
+.mchip-done { background: #e6f6f0; } .mchip-tick { color: var(--green); font-weight: 800; }
+.mv-cdots i.done { box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px var(--green); }
+.done-tick { color: var(--green); font-weight: 800; }
+
 /* Notifications */
 #toast-root { position: fixed; left: 50%; bottom: calc(18px + var(--safe-b)); transform: translateX(-50%); z-index: 80; display: flex; flex-direction: column; gap: 6px; align-items: center; pointer-events: none; }
 .toast { background: var(--ink); color: #fff; padding: 10px 16px; font-size: 0.86rem; max-width: 90vw; transition: opacity .4s; }
@@ -317,6 +332,8 @@ body.readonly .needs-edit, body.readonly [data-action=add-event], body.readonly 
   .top-plan { display: flex; align-items: center; gap: 5px; flex: 1 1 auto; min-width: 0; border: none; background: none; padding: 4px 0; font-weight: 800; font-size: 0.9rem; text-align: left; }
   .top-plan-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .invite-form { grid-template-columns: 1fr; }
+  .sync-row { grid-template-columns: 1fr 1fr; } .sync-row .check, .sync-row .btn { grid-column: 1 / -1; }
+  .key-row { grid-template-columns: 1fr; }
   .topbar .btn-icon { min-width: 34px; padding: 5px; } .topbar { gap: 6px; }
   body:not([data-page=calendar]) .top-seg { visibility: hidden; }
   .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: #fff; border-top: 1px solid var(--ink); padding-bottom: var(--safe-b); }

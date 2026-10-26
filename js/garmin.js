@@ -1,0 +1,297 @@
+// Garmin: connect with a Garmin Connect Personal API key, sync activities (summaries + FIT files)
+// into this device's storage, and show them. The key stays on this device. Requests go through the
+// site's relay (garmin-relay/), because Garmin doesn't accept them straight from a web page.
+(function (TP) {
+  var h = TP.h;
+  var RELAY = 'https://garmin.jmraceplanner.co.uk';
+  var KEY = 'tp-garmin-key', TOKEN = 'tp-garmin-token', RANGE = 'tp-garmin-range';
+  var G = TP.garmin = { acts: [], loaded: false, syncing: null };
+
+  // --- Storage on this device (IndexedDB: activity summaries and their second-by-second streams) ---
+  var dbp = null;
+  function db() {
+    if (!dbp) dbp = new Promise(function (res, rej) {
+      var r = indexedDB.open('tp-garmin', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('acts', { keyPath: 'id' }); r.result.createObjectStore('streams', { keyPath: 'id' }); };
+      r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
+    });
+    return dbp;
+  }
+  function tx(store, mode, fn) {
+    return db().then(function (d) { return new Promise(function (res, rej) {
+      var t = d.transaction(store, mode), s = t.objectStore(store), out = fn(s);
+      t.oncomplete = function () { res(out && out.result !== undefined ? out.result : out); }; t.onerror = function () { rej(t.error); };
+    }); });
+  }
+  function putActs(list) { return tx('acts', 'readwrite', function (s) { list.forEach(function (a) { s.put(a); }); }); }
+  function putStream(st) { return tx('streams', 'readwrite', function (s) { s.put(st); }); }
+  G.stream = function (id) { return tx('streams', 'readonly', function (s) { return s.get(id); }); };
+  function hasStream(id) { return tx('streams', 'readonly', function (s) { return s.getKey(id); }).then(function (k) { return k !== undefined; }); }
+  G.load = function () {
+    return tx('acts', 'readonly', function (s) { return s.getAll(); }).then(function (all) {
+      G.acts = (all || []).sort(function (a, b) { return a.start < b.start ? 1 : -1; }); G.loaded = true; TP.changed();
+    }).catch(function (e) { console.warn('garmin storage', e); G.loaded = true; });
+  };
+
+  // --- Connection ---
+  G.key = function () { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } };
+  G.connected = function () { return !!G.key(); };
+  function jwtExp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return Date.now() + 23 * 3600e3; } }
+  // The key is swapped for an access token that lasts up to 24 hours; a new one is fetched when needed.
+  function token(force) {
+    var c = null; try { c = JSON.parse(localStorage.getItem(TOKEN) || 'null'); } catch (e) {}
+    if (!force && c && c.exp > Date.now() + 60e3) return Promise.resolve(c.token);
+    return fetch(RELAY + '/personalapitoken-service/personal-api/personal-api-key/token', { method: 'POST', headers: { Authorization: 'ApiKey ' + G.key() } })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) throw new Error('Garmin didn’t accept that API key. Check it was copied in full and hasn’t expired or been deleted.');
+        if (!r.ok) throw new Error('Garmin returned an error (' + r.status + '). Try again in a minute.');
+        return r.json();
+      }).then(function (j) {
+        var t = j.access_token || j.accessToken || j.token;
+        if (!t) throw new Error('Garmin’s reply didn’t include an access token.');
+        localStorage.setItem(TOKEN, JSON.stringify({ token: t, exp: j.expires_in ? Date.now() + j.expires_in * 1000 : jwtExp(t) }));
+        return t;
+      });
+  }
+  function api(path, asBytes, retried) {
+    return token(false).then(function (t) {
+      return fetch(RELAY + path, { headers: { Authorization: 'Bearer ' + t, Accept: asBytes ? '*/*' : 'application/json' } });
+    }).then(function (r) {
+      if (r.status === 401 && !retried) { localStorage.removeItem(TOKEN); return api(path, asBytes, true); }
+      if (r.status === 429) throw new Error('Garmin is limiting requests right now. Wait a few minutes and sync again – what’s already downloaded is kept.');
+      if (!r.ok) throw new Error('Garmin returned an error (' + r.status + ') for ' + path.split('?')[0] + '.');
+      return asBytes ? r.arrayBuffer() : r.json();
+    });
+  }
+  G.connect = function (key) {
+    key = key.trim();
+    if (key.length < 10) return Promise.reject(new Error('That doesn’t look like a complete API key.'));
+    localStorage.setItem(KEY, key); localStorage.removeItem(TOKEN);
+    return token(true).catch(function (e) { localStorage.removeItem(KEY); throw e; });
+  };
+  G.disconnect = function () { localStorage.removeItem(KEY); localStorage.removeItem(TOKEN); TP.changed(); };
+  G.clearActs = function () {
+    return Promise.all([tx('acts', 'readwrite', function (s) { s.clear(); }), tx('streams', 'readwrite', function (s) { s.clear(); })])
+      .then(function () { G.acts = []; TP.changed(); });
+  };
+
+  // --- Activities ---
+  function disciplineFor(k) {
+    k = (k || '').toLowerCase();
+    if (k.indexOf('swim') >= 0) return 'Swim';
+    if (k.indexOf('run') >= 0) return 'Run';
+    if (/cycl|bik|ride/.test(k)) return 'Bike';
+    if (/strength|weight|gym/.test(k)) return 'Gym';
+    if (k.indexOf('hyrox') >= 0) return 'Hyrox';
+    return 'Other';
+  }
+  function num(x) { var v = parseFloat(x); return isFinite(v) ? v : null; }
+  function summary(a) {
+    var type = (a.activityType && a.activityType.typeKey) || '', start = String(a.startTimeLocal || a.startTimeGMT || '');
+    return { id: String(a.activityId), name: a.activityName || '', type: type, sport: disciplineFor(type), start: start, date: start.slice(0, 10),
+      duration_s: num(a.duration), moving_s: num(a.movingDuration) || num(a.duration), distance_m: num(a.distance), elev_m: num(a.elevationGain),
+      avg_hr: num(a.averageHR), max_hr: num(a.maxHR), avg_power: num(a.avgPower), np: num(a.normPower), calories: num(a.calories),
+      aerobic_te: num(a.aerobicTrainingEffect), anaerobic_te: num(a.anaerobicTrainingEffect), load: num(a.activityTrainingLoad), vo2max: num(a.vO2MaxValue),
+      multisport: type.indexOf('multi_sport') >= 0, fit: false };
+  }
+  function search(from, to) {
+    var out = [], start = 0, limit = 100;
+    function page() {
+      var q = '?start=' + start + '&limit=' + limit + '&startDate=' + from + '&endDate=' + to;
+      return api('/activitylist-service/activities/search/activities' + q).then(function (list) {
+        list = Array.isArray(list) ? list : (list && (list.activities || list.activityList)) || [];
+        out = out.concat(list);
+        if (list.length === limit && start < 5000) { start += limit; return page(); }
+        return out;
+      });
+    }
+    return page();
+  }
+
+  // Garmin's "original" download is a ZIP holding the FIT file. A small unzip using the browser's own
+  // decompression (no extra library).
+  function unzip(buf) {
+    var b = new Uint8Array(buf), v = new DataView(buf);
+    if (b[8] === 0x2e && b[9] === 0x46 && b[10] === 0x49 && b[11] === 0x54) return Promise.resolve(b);   // already a FIT file
+    for (var e = b.length - 22; e >= Math.max(0, b.length - 66000); e--) if (v.getUint32(e, true) === 0x06054b50) break;
+    if (e < 0) return Promise.reject(new Error('Download wasn’t a ZIP or FIT file.'));
+    var n = v.getUint16(e + 10, true), p = v.getUint32(e + 16, true);
+    for (var i = 0; i < n; i++) {
+      var method = v.getUint16(p + 10, true), csize = v.getUint32(p + 20, true), nlen = v.getUint16(p + 28, true), xlen = v.getUint16(p + 30, true), clen = v.getUint16(p + 32, true), off = v.getUint32(p + 42, true);
+      var name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nlen));
+      p += 46 + nlen + xlen + clen;
+      if (!/\.fit$/i.test(name)) continue;
+      var start = off + 30 + v.getUint16(off + 26, true) + v.getUint16(off + 28, true), data = b.subarray(start, start + csize);
+      if (method === 0) return Promise.resolve(data);
+      return new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer().then(function (x) { return new Uint8Array(x); });
+    }
+    return Promise.reject(new Error('No FIT file inside the download.'));
+  }
+  // FIT -> compact second-by-second streams (seconds from start) plus the legs of multisport files.
+  function parseFit(id, bytes) {
+    var dec = new FIT.Decoder(FIT.Stream.fromByteArray(Array.from(bytes)));
+    var res = dec.read({ convertDateTimesToDates: true }), m = res.messages, rec = m.recordMesgs || [];
+    if (!rec.length) return null;
+    var t0 = rec[0].timestamp.getTime(), col = { t: [], hr: [], power: [], speed: [], cadence: [], distance: [], altitude: [] };
+    rec.forEach(function (r) {
+      col.t.push(Math.round((r.timestamp.getTime() - t0) / 1000));
+      col.hr.push(r.heartRate == null ? null : r.heartRate);
+      col.power.push(r.power == null ? null : r.power);
+      var sp = r.enhancedSpeed != null ? r.enhancedSpeed : r.speed; col.speed.push(sp == null ? null : Math.round(sp * 1000) / 1000);
+      col.cadence.push(r.cadence == null ? null : r.cadence + (r.fractionalCadence || 0));
+      col.distance.push(r.distance == null ? null : Math.round(r.distance * 10) / 10);
+      var al = r.enhancedAltitude != null ? r.enhancedAltitude : r.altitude; col.altitude.push(al == null ? null : Math.round(al * 10) / 10);
+    });
+    var legs = (m.sessionMesgs || []).map(function (s) {
+      return { sport: s.sport || '', sub_sport: s.subSport || '', start: s.startTime ? Math.round((s.startTime.getTime() - t0) / 1000) : 0,
+        timer_s: s.totalTimerTime, elapsed_s: s.totalElapsedTime, distance_m: s.totalDistance, avg_hr: s.avgHeartRate, avg_power: s.avgPower, np: s.normalizedPower };
+    });
+    var lengths = (m.lengthMesgs || []).filter(function (l) { return l.lengthType === 'active'; }).map(function (l) { return { dur: l.totalTimerTime, strokes: l.totalStrokes, stroke: l.swimStroke }; });
+    return Object.assign({ id: id, legs: legs.length > 1 ? legs : [], lengths: lengths }, col);
+  }
+
+  // Sync: list activities in the range, keep their summaries, then fetch each new FIT file.
+  G.sync = function (from, to, withFit) {
+    if (G.syncing) return G.syncing;
+    G.progress = 'Finding activities…'; TP.changed();
+    G.syncing = search(from, to).then(function (list) {
+      var acts = list.map(summary), byId = {};
+      G.acts.forEach(function (a) { byId[a.id] = a; });
+      acts.forEach(function (a) { a.fit = !!(byId[a.id] && byId[a.id].fit); byId[a.id] = a; });
+      G.acts = Object.keys(byId).map(function (k) { return byId[k]; }).sort(function (a, b) { return a.start < b.start ? 1 : -1; });
+      return putActs(acts).then(function () {
+        if (!withFit) return { found: acts.length, fit: 0 };
+        var todo = acts.filter(function (a) { return !a.fit; }), done = 0, failed = 0;
+        return todo.reduce(function (chain, a, i) {
+          return chain.then(function () {
+            G.progress = 'Downloading FIT files ' + (i + 1) + ' of ' + todo.length + '…'; TP.changed();
+            return api('/download-service/files/activity/' + a.id, true).then(unzip).then(function (bytes) {
+              var st = parseFit(a.id, bytes); a.fit = true;
+              return (st ? putStream(st) : Promise.resolve()).then(function () { done++; return putActs([a]); });
+            }).catch(function (e) { failed++; console.warn('FIT', a.id, e); if (/limiting/.test(e.message)) throw e; });
+          });
+        }, Promise.resolve()).then(function () { return { found: acts.length, fit: done, failed: failed }; });
+      });
+    }).then(function (r) {
+      TP.toast('Synced ' + r.found + ' activities' + (r.fit ? ', ' + r.fit + ' new FIT files' : '') + (r.failed ? ' (' + r.failed + ' couldn’t be read)' : '') + '.');
+      return r;
+    }).catch(function (e) { TP.toast(e.message, 'error'); })
+      .finally(function () { G.syncing = null; G.progress = ''; TP.changed(); });
+    return G.syncing;
+  };
+
+  // Planned sessions count as done when there's a Garmin activity of the same sport that day.
+  G.doneFor = function (s) {
+    var sp = TP.sportOf(s.discipline);
+    return G.acts.filter(function (a) { return a.date === s.date && (a.sport === sp || (a.multisport && sp !== 'Gym')); })[0] || null;
+  };
+
+  // --- Page ---
+  var fmtDur = function (s) { return s ? TP.fmtDuration(s) : '–'; };
+  TP.renderGarmin = function (root) {
+    root.appendChild(h('div', { class: 'page-head' }, h('h2', null, 'Garmin'),
+      h('p', { class: 'muted' }, 'Connect your Garmin account to bring in your activities, tick off planned sessions, and (next) analyse your training.')));
+    if (!G.connected()) { root.appendChild(connectCard()); if (G.acts.length) root.appendChild(activities()); return; }
+    root.appendChild(syncCard());
+    if (!G.loaded) { root.appendChild(h('p', { class: 'muted' }, 'Loading…')); return; }
+    if (!G.acts.length) { root.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No activities yet'), h('p', null, 'Pick a date range above and press Sync.'))); return; }
+    root.appendChild(overview());
+    root.appendChild(activities());
+  };
+
+  function connectCard() {
+    var key = TP.input('password', '', { placeholder: 'Paste your Garmin API key', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+    var go = h('button', { class: 'btn btn-primary', onclick: function () {
+      go.disabled = true; go.textContent = 'Connecting…';
+      G.connect(key.value).then(function () { TP.toast('Garmin connected.'); TP.changed(); })
+        .catch(function (e) { TP.toast(e.message, 'error'); }).finally(function () { go.disabled = false; go.textContent = 'Connect'; });
+    } }, 'Connect');
+    var step = function (n, body) { return h('li', null, h('span', { class: 'step-n' }, n), h('div', null, body)); };
+    return h('div', { class: 'panel garmin-connect' },
+      h('div', { class: 'panel-h' }, 'Connect Garmin with your personal API key'),
+      h('ol', { class: 'steps-list' },
+        step(1, [h('b', null, 'Open Garmin Connect’s API key page. '), 'On a computer or your phone’s browser, go to ',
+          h('a', { href: 'https://connect.garmin.com/app/settings/personalApiToken', target: '_blank', rel: 'noopener' }, 'connect.garmin.com/app/settings/personalApiToken'),
+          ' and sign in with your Garmin account (in Garmin Connect on the web: your profile picture → Settings → Personal API Key).']),
+        step(2, [h('b', null, 'Select Create Key. '), 'Read and accept Garmin’s terms.']),
+        step(3, [h('b', null, 'Choose how long it lasts. '), '1 year is easiest. Garmin emails you about a week before it expires, and you can make a new one the same way.']),
+        step(4, [h('b', null, 'Copy the key straight away. '), 'Garmin shows it only once. If you lose it, delete it on that page and create a new one.']),
+        step(5, [h('b', null, 'Paste it below and press Connect.')])),
+      h('div', { class: 'key-row' }, key, go),
+      h('p', { class: 'hint' }, 'Treat the key like a password. It’s kept only in this browser on this device and is never added to your plan or account, so connect each device separately. ' +
+        'Requests pass through this site’s relay because Garmin doesn’t accept them straight from a web page; the relay doesn’t store anything. ' +
+        'The personal API is for your own data only, and it’s read-only: nothing on your Garmin account can be changed from here.'));
+  }
+
+  function syncCard() {
+    var saved = {}; try { saved = JSON.parse(localStorage.getItem(RANGE) || '{}'); } catch (e) {}
+    var from = TP.input('date', saved.from || TP.addDays(TP.today(), -84)), to = TP.input('date', saved.to || TP.today());
+    var fit = TP.input('checkbox', '', { checked: saved.fit !== false });
+    var k = G.key();
+    var btn = h('button', { class: 'btn btn-primary', disabled: !!G.syncing, onclick: function () {
+      if (!from.value || !to.value || from.value > to.value) { TP.toast('Pick a start date before the end date.', 'warn'); return; }
+      localStorage.setItem(RANGE, JSON.stringify({ from: from.value, to: to.value, fit: fit.checked }));
+      G.sync(from.value, to.value, fit.checked);
+    } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync from Garmin');
+    return h('div', { class: 'panel' },
+      h('div', { class: 'panel-top' }, h('div', null, h('div', { class: 'panel-h' }, 'Garmin connected'),
+        h('div', { class: 'muted small' }, 'API key …' + k.slice(-4) + ' · saved on this device · ' + G.acts.length + ' activities stored here')),
+        h('a', { href: '#', class: 'small', onclick: function (e) {
+          e.preventDefault();
+          TP.confirm('Disconnect Garmin on this device? The API key is removed from this browser. Synced activities are kept unless you also clear them below.', 'Disconnect', function () { G.disconnect(); });
+        } }, 'Disconnect')),
+      h('div', { class: 'sync-row' }, TP.field('From', from), TP.field('To', to),
+        h('label', { class: 'check' }, fit, 'Also download FIT files (heart rate, power, pace each second)'), btn),
+      G.progress ? h('div', { class: 'sync-progress' }, G.progress) : null);
+  }
+
+  // Weekly hours by sport for the stored activities (last 16 weeks with data).
+  function overview() {
+    var acts = G.acts, last = acts.length ? acts[0].date : TP.today(), w0 = TP.weekStart(TP.addDays(last, -7 * 15)), weeks = [];
+    for (var i = 0; i < 16; i++) weeks.push(TP.addDays(w0, 7 * i));
+    var sports = ['Swim', 'Bike', 'Run', 'Gym', 'Hyrox', 'Other'].filter(function (sp) { return acts.some(function (a) { return a.sport === sp; }); });
+    var col = function (sp) { return TP.SPORT_COLOURS[sp] || '#a0a0a0'; };
+    var data = weeks.map(function (w) { var e = TP.addDays(w, 6); return sports.map(function (sp) { return acts.filter(function (a) { return a.sport === sp && a.date >= w && a.date <= e; }).reduce(function (t, a) { return t + (a.moving_s || 0) / 3600; }, 0); }); });
+    var tots = data.map(function (d) { return d.reduce(function (a, x) { return a + x; }, 0); }), max = Math.max.apply(null, tots.concat([1])) * 1.15;
+    var W = 640, H = 200, L = 30, B = 22, T = 14, bw = (W - L - 6) / weeks.length, y = function (v) { return T + (H - T - B) * (1 - v / max); }, s = '';
+    data.forEach(function (d, i) {
+      var acc = 0, x = L + i * bw + bw * 0.15;
+      d.forEach(function (v, j) { if (v > 0) { s += '<rect x="' + x + '" y="' + y(acc + v) + '" width="' + bw * 0.7 + '" height="' + (y(acc) - y(acc + v)) + '" fill="' + col(sports[j]) + '"/>'; acc += v; } });
+      if (tots[i] > 0) s += '<text x="' + (L + i * bw + bw / 2) + '" y="' + (y(tots[i]) - 3) + '" text-anchor="middle" class="tot">' + tots[i].toFixed(1) + '</text>';
+      if (i % 2 === 0) s += '<text x="' + (L + i * bw + bw / 2) + '" y="' + (H - 5) + '" text-anchor="middle" class="ax">' + TP.fmt(weeks[i], '%d %b') + '</text>';
+    });
+    var recent = acts.filter(function (a) { return a.date >= TP.addDays(TP.today(), -27); });
+    var planned = TP.state.sessions.filter(function (x) { return x.date >= TP.addDays(TP.today(), -27) && x.date <= TP.today(); });
+    var done = planned.filter(function (x) { return G.doneFor(x); }).length;
+    var sumH = recent.reduce(function (t, a) { return t + (a.moving_s || 0); }, 0) / 3600, sumKm = recent.reduce(function (t, a) { return t + (a.distance_m || 0); }, 0) / 1000;
+    var kpi = function (v, l, sub) { return h('div', { class: 'kpi' }, h('div', { class: 'kpi-v' }, v), h('div', { class: 'kpi-l' }, l), sub ? h('div', { class: 'kpi-s' }, sub) : null); };
+    return h('div', null,
+      h('div', { class: 'kpis kpis-4', style: 'margin-bottom:12px' },
+        kpi(recent.length, 'Activities', 'last 4 weeks'), kpi(sumH.toFixed(1) + ' h', 'Training time', 'last 4 weeks'),
+        kpi(TP.round(sumKm, 1) + ' km', 'Distance', 'last 4 weeks'), kpi(planned.length ? done + ' / ' + planned.length : '–', 'Planned sessions done', 'last 4 weeks')),
+      h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Weekly training time'),
+        h('div', { class: 'chart no-units', html: '<div class="chart-leg">' + sports.map(function (sp) { return '<span><i style="background:' + col(sp) + '"></i>' + sp + '</span>'; }).join('') + '</div><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" class="vchart" style="height:200px">' + s + '</svg>' }),
+        h('p', { class: 'hint' }, 'Full analysis – training load, fitness and fatigue, intensity zones, power and pace curves, and block reviews – is the next step for this page.')));
+  }
+
+  var shown = 40;
+  function activities() {
+    var acts = G.acts, rows = acts.slice(0, shown).map(function (a) {
+      var pace = a.sport === 'Run' && a.distance_m > 0 ? TP.fmtDuration(a.moving_s / (a.distance_m / 1000)) + ' /km' : a.sport === 'Swim' && a.distance_m > 0 ? TP.fmtDuration(a.moving_s / (a.distance_m / 100)) + ' /100 m' : a.avg_power ? Math.round(a.np || a.avg_power) + ' W' : '';
+      return h('tr', null, h('td', { class: 'nowrap' }, TP.fmt(a.date, '%a %d %b %Y')),
+        h('td', null, h('span', { class: 'sdot', style: 'background:' + (TP.SPORT_COLOURS[a.sport] || '#a0a0a0') }), a.name || a.type),
+        h('td', { class: 'num' }, fmtDur(a.moving_s)), h('td', { class: 'num' }, a.distance_m > 0 ? TP.round(a.distance_m / 1000, 2) + ' km' : '–'),
+        h('td', { class: 'num' }, pace || '–'), h('td', { class: 'num' }, a.avg_hr ? Math.round(a.avg_hr) : '–'),
+        h('td', { class: 'num' }, a.fit ? '✓' : ''));
+    });
+    return h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Activities (' + acts.length + ')'),
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
+        h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Activity'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, 'Distance'),
+          h('th', { class: 'num' }, 'Pace / power'), h('th', { class: 'num' }, 'Avg HR'), h('th', { class: 'num' }, 'FIT'))),
+        h('tbody', null, rows))),
+      acts.length > shown ? h('button', { class: 'btn btn-sm', style: 'margin-top:8px', onclick: function () { shown += 60; TP.changed(); } }, 'Show more') : null,
+      h('div', { class: 'btn-row', style: 'margin-top:10px' }, h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
+        TP.confirm('Delete the ' + acts.length + ' Garmin activities stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { G.clearActs(); });
+      } }, 'Clear stored activities')));
+  }
+})(window.TP);

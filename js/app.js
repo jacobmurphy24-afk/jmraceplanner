@@ -15,18 +15,12 @@
     } else if (v.page === 'reports') {
       var rp = h('div', { class: 'page' }); TP.renderReports(rp); main.appendChild(rp);
     } else if (v.page === 'garmin') {
-      main.appendChild(garminPlaceholder());
+      var gp = h('div', { class: 'page' }); TP.renderGarmin(gp); main.appendChild(gp);
     }
     var sd = TP.clear(document.getElementById('side-day')); TP.renderDay(sd);
     TP.renderAccount();
   };
 
-  function garminPlaceholder() {
-    return h('div', { class: 'page' }, h('div', { class: 'page-head' }, h('h2', null, 'Garmin analysis')),
-      h('div', { class: 'empty' }, TP.icon('heart', 'width:32px;height:32px'), h('h3', null, 'Coming next'),
-        h('p', null, 'This is where your Garmin activities will be analysed: training load, fitness and form, intensity, power and pace curves, and block reviews.'),
-        h('p', { class: 'muted' }, 'Activities will be read from FIT files you add here, so your data stays on this device.')));
-  }
 
   TP.go = function (page) { TP.view.page = page; TP.closeMenu(); TP.render(); window.scrollTo(0, 0); };
   TP.setMode = function (mode) { TP.view.page = 'calendar'; TP.view.mode = mode; TP.render(); };
@@ -89,6 +83,7 @@
     if (window.matchMedia('(max-width: 760px)').matches) TP.view.mode = 'Month';
     TP.onChange(TP.render);
     TP.cloud.init();
+    TP.garmin.load();
     TP.render();
     TP.startUnits();
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () {});

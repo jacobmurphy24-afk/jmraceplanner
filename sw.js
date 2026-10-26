@@ -1,8 +1,8 @@
 // Offline support: serve the app from the cache, and refresh the cache in the background
 // so a new version is picked up on the next visit.
-var CACHE = 'tp-v3';
+var CACHE = 'tp-v4';
 var FILES = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'js/constants.js', 'js/store.js', 'js/ui.js',
-             'js/calendar.js', 'js/forms.js', 'js/reports.js', 'js/cloud.js', 'js/account.js', 'js/app.js', 'js/firebase-config.js', 'vendor/firebase.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+             'js/calendar.js', 'js/forms.js', 'js/reports.js', 'js/cloud.js', 'js/account.js', 'js/app.js', 'js/firebase-config.js', 'vendor/firebase.js', 'vendor/fitsdk.js', 'js/garmin.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }));

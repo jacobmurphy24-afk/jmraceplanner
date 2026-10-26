@@ -59,7 +59,8 @@
       ? h('span', { class: 'yv-num yv-race', title: race.title, style: 'background:' + TP.deep(race.col), onclick: stop(function () { TP.eventForm(race.bid); }) }, di)
       : h('span', { class: 'yv-num' }, di);
     var dots = ds.length ? h('div', { class: 'yv-dots' }, ds.slice(0, 3).map(function (s) {
-      return h('span', { class: 'yv-dot', title: TP.sportLabel(s.discipline) + ' · ' + s.type, style: 'background:' + TP.typeCol(s.type) + '55',
+      var done = TP.garmin && TP.garmin.doneFor(s);
+      return h('span', { class: 'yv-dot', title: TP.sportLabel(s.discipline) + ' · ' + s.type + (done ? ' (done)' : ''), style: 'background:' + TP.typeCol(s.type) + (done ? '' : '55'),
         onclick: stop(function () { TP.select(d); TP.sessionView(s.id); }) }, TP.SPORT_LETTER[TP.sportOf(s.discipline)] || '?');
     }), ds.length > 3 ? h('span', { class: 'yv-more' }, '+' + (ds.length - 3)) : null) : null;
     var blk = ov.filter(function (e) { return e.kind !== 'race'; });
@@ -95,9 +96,11 @@
 
   // --- Month view ---
   function chip(s) {
-    return h('div', { class: 'mchip', style: 'border-left-color:' + TP.typeCol(s.type), title: TP.sportLabel(s.discipline) + ' · ' + s.type,
+    var done = TP.garmin && TP.garmin.doneFor(s), act = done && done.distance_m > 50 ? TP.round(done.distance_m / 1000, 1) + ' km' : done ? Math.round((done.moving_s || 0) / 60) + ' min' : '';
+    return h('div', { class: 'mchip' + (done ? ' mchip-done' : ''), style: 'border-left-color:' + TP.typeCol(s.type), title: TP.sportLabel(s.discipline) + ' · ' + s.type + (done ? ' — done: ' + done.name : ''),
       onclick: stop(function () { TP.select(s.date); TP.sessionView(s.id); }) },
-      h('span', { class: 'mchip-t' }, TP.sportLabel(s.discipline) + ' ' + s.type), h('span', { class: 'mchip-d' }, TP.planAmount(s)));
+      done ? h('span', { class: 'mchip-tick' }, '✓') : null,
+      h('span', { class: 'mchip-t' }, TP.sportLabel(s.discipline) + ' ' + s.type), h('span', { class: 'mchip-d' }, done ? act : TP.planAmount(s)));
   }
   TP.renderMonth = function (root) {
     var ms = TP.view.month, y = TP.parse(ms).getFullYear(), m = TP.parse(ms).getMonth(), sched = TP.schedule();
@@ -137,7 +140,7 @@
       h('div', { class: 'mv-cbars' }, ov.filter(function (e) { return e.kind !== 'race'; }).map(function (e) {
         return h('i', { class: e.kind === 'recov' ? 'recov' : '', style: 'background:' + TP.deep(e.col) });
       })),
-      h('div', { class: 'mv-cdots' }, ds.slice(0, 4).map(function (s) { return h('i', { style: 'background:' + TP.typeCol(s.type) }); })));
+      h('div', { class: 'mv-cdots' }, ds.slice(0, 4).map(function (s) { return h('i', { class: TP.garmin && TP.garmin.doneFor(s) ? 'done' : '', style: 'background:' + TP.typeCol(s.type) }); })));
     return h('div', { class: 'mv-day' + (d === TP.today() ? ' mv-today' : '') + (d === TP.view.selected ? ' mv-sel' : ''), onclick: function () { TP.select(d); } },
       h('div', { class: 'mv-numrow' }, num), full, compact);
   }
@@ -157,6 +160,7 @@
         root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.sessionView(s.id); } },
           h('span', { class: 'dot', style: 'background:' + TP.typeCol(s.type) }),
           h('span', { class: 'grow' }, TP.sportLabel(s.discipline) + ' · ' + s.type),
+          TP.garmin && TP.garmin.doneFor(s) ? h('span', { class: 'done-tick', title: 'Done (Garmin)' }, '✓') : null,
           h('span', { class: 'muted' }, TP.planAmount(s))));
       });
     }
