@@ -1,6 +1,6 @@
 // Offline support: serve the app from the cache, and refresh the cache in the background
 // so a new version is picked up on the next visit.
-var CACHE = 'tp-v1';
+var CACHE = 'tp-v2';
 var FILES = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'js/constants.js', 'js/store.js', 'js/ui.js',
              'js/calendar.js', 'js/forms.js', 'js/reports.js', 'js/app.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); })); self.skipWaiting(); });

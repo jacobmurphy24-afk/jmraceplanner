@@ -24,7 +24,11 @@ h1, h2, h3 { margin: 0; font-weight: 700; }
 .nav button:hover { background: var(--rule2); }
 .nav button.on { box-shadow: inset 3px 0 0 var(--accent); color: var(--ink); }
 .side-mid { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 10px -4px 0; padding: 0 4px; }
-.side-foot { border-top: 1px solid var(--ink); padding-top: 6px; }
+.side-foot { border-top: 1px solid var(--ink); padding-top: 2px; }
+.side-foot .side-section { margin-top: 8px; }
+/* Data row: three equal buttons, icon above label (as in the R app). */
+.data-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.data-row .btn { flex-direction: column; justify-content: center; gap: 3px; font-size: 0.72rem; padding: 7px 2px; text-align: center; line-height: 1.1; }
 
 /* --- Buttons & inputs --- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--ink); background: var(--paper); font-weight: 600; font-size: 0.88rem; line-height: 1.1; min-height: 36px; }
@@ -280,6 +284,7 @@ body.md-open { overflow: hidden; }
   .topbar { display: flex; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 20; background: #fff; border-bottom: 1px solid var(--ink); padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; }
   .topbar .brand { border: none; padding: 0; flex: 1; min-width: 0; } .topbar .brand-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar .logo { width: 28px; height: 28px; }
+  .topbar .btn-icon { min-width: 34px; padding: 5px; } .topbar { gap: 6px; }
   body:not([data-page=calendar]) .top-seg { visibility: hidden; }
   .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: #fff; border-top: 1px solid var(--ink); padding-bottom: var(--safe-b); }
   .tabbar button { border: none; background: none; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 6px; font-size: 0.66rem; font-weight: 700; color: var(--muted); min-height: 56px; justify-content: center; }

@@ -1,5 +1,5 @@
 // The plan: events (races / training-only blocks), sessions, templates and preferences.
-// Saved in this browser's storage on every change; backups move it between devices.
+// Saved in this browser's storage on every change; Save plan / Load plan move it between devices.
 (function (TP) {
   var KEY = 'tp-planner-v1';
   var listeners = [];
@@ -193,7 +193,7 @@
 
   // --- Backups ---
   TP.exportJSON = function () { return JSON.stringify({ app: 'training-planner', version: 1, saved: new Date().toISOString(), plan: TP.state }, null, 1); };
-  // Accepts this site's backups and workspaces converted from the R app (export_for_web.R).
+  // Accepts plans saved by this site and workspaces converted from the R app (export_for_web.R).
   TP.importJSON = function (text) {
     var d = JSON.parse(text);
     if (d.plan) { TP.state = normalise(d.plan); return; }
@@ -208,6 +208,6 @@
       TP.state = normalise({ events: ev, sessions: d.sessions_data || [], templates: d.session_templates || {}, prefs: TP.state.prefs });
       return;
     }
-    throw new Error('This file isn’t a Training Planner backup.');
+    throw new Error('This file isn’t a saved Training Planner plan.');
   };
 })(window.TP);

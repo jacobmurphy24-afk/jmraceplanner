@@ -51,7 +51,12 @@
       <div class="seg seg-full"><button class="chip" data-mode="Month">Month</button><button class="chip" data-mode="Year">Year</button></div>
       <div class="side-mid" id="side-day"></div>
       <div class="side-foot">
-        <button class="btn btn-ghost" data-action="settings"><svg class="ic"><use href="#i-gear"/></svg>Settings &amp; data</button>
+        <div class="side-section">Data</div>
+        <div class="data-row">
+          <button class="btn btn-ghost" data-action="settings"><svg class="ic"><use href="#i-gear"/></svg>Settings</button>
+          <button class="btn btn-ghost" data-action="save-plan"><svg class="ic"><use href="#i-download"/></svg>Save plan</button>
+          <button class="btn btn-ghost" data-action="load-plan"><svg class="ic"><use href="#i-folder"/></svg>Load plan</button>
+        </div>
       </div>
     </aside>
 
@@ -59,8 +64,11 @@
     <header class="topbar">
       <div class="brand"><div class="logo"><svg class="ic"><use href="#i-activity"/></svg></div><div class="brand-t">Training Planner</div></div>
       <div class="seg top-seg"><button class="chip" data-mode="Month">Month</button><button class="chip" data-mode="Year">Year</button></div>
-      <button class="btn btn-icon" data-action="settings" aria-label="Settings and data"><svg class="ic"><use href="#i-gear"/></svg></button>
+      <button class="btn btn-icon" data-action="save-plan" aria-label="Save plan" title="Save plan"><svg class="ic"><use href="#i-download"/></svg></button>
+      <button class="btn btn-icon" data-action="load-plan" aria-label="Load plan" title="Load plan"><svg class="ic"><use href="#i-folder"/></svg></button>
+      <button class="btn btn-icon" data-action="settings" aria-label="Settings"><svg class="ic"><use href="#i-gear"/></svg></button>
     </header>
+    <input type="file" id="plan-file" accept=".json,application/json" hidden>
 
     <main id="main"></main>
 
