@@ -8,7 +8,7 @@
 // Pure functions only: no page code here. Dates are 'YYYY-MM-DD' strings.
 (function (TP) {
   var A = TP.TA = {};
-  A.FEATURE_VERSION = 3;
+  A.FEATURE_VERSION = 4;
   var MMP_D = A.MMP_DURATIONS = [5, 10, 15, 30, 60, 120, 180, 300, 480, 600, 720, 1200, 1800, 2700, 3600, 5400, 7200];
   var RUN_D = A.RUN_DURATIONS = [30, 60, 120, 180, 300, 480, 600, 720, 1200, 1800, 2700, 3600];
   var BIKE_SPD_D = [600, 1200, 1800, 3600, 5400, 7200, 10800, 14400, 18000];
@@ -274,6 +274,292 @@
     return res;
   }
 
+  // ===========================================================================
+  // Session structure: warm-up, sets / intervals, cool-down and splits. Uses structured-workout steps or
+  // lap-button laps from the watch when they exist, otherwise detects warm-up and cool-down from the data.
+  // st: a clean stream; laps / lengths: from the FIT file, times in seconds from the start of the file.
+  // ===========================================================================
+  function countLE(arr, x) { var lo = 0, hi = arr.length; while (lo < hi) { var m = (lo + hi) >> 1; if (arr[m] <= x) lo = m + 1; else hi = m; } return lo; }
+  function twoMeans(x) {
+    x = x.filter(function (v) { return fin(v) && v > 0; });
+    if (x.length < 3) return null;
+    var lo = quantile(x, 0.2), hi = quantile(x, 0.85);
+    for (var k = 0; k < 20; k++) {
+      var thr = (lo + hi) / 2, a = x.filter(function (v) { return v < thr; }), b = x.filter(function (v) { return v >= thr; });
+      if (!a.length || !b.length) return null;
+      lo = mean(a); hi = mean(b);
+    }
+    return { lo: lo, hi: hi, thr: (lo + hi) / 2 };
+  }
+  function labelBlocks(hard) {
+    var k = hard.map(function (x) { return x ? 'Work' : 'Recovery'; }), first = hard.indexOf(true), last = hard.lastIndexOf(true);
+    if (first < 0) return hard.map(function () { return 'Main'; });
+    for (var i = 0; i < first; i++) k[i] = 'Warm-up';
+    for (i = last + 1; i < hard.length; i++) k[i] = 'Cool-down';
+    return k;
+  }
+  // Round half to even, as R's round() does (keeps names identical to the R app's).
+  function rhe(x) { var f = Math.floor(x), d = x - f; return Math.abs(d - 0.5) < 1e-9 ? (f % 2 === 0 ? f : f + 1) : Math.round(x); }
+  function fmtThousands(v) { return Math.round(v).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function rle(v) { var out = []; v.forEach(function (x) { if (out.length && out[out.length - 1].v === x) out[out.length - 1].n++; else out.push({ v: x, n: 1 }); }); return out; }
+  A.sessionStructure = function (st, a, laps, lengths) {
+    var disc = a.discipline, pool = a.pool_length_m; if (pool > 100) pool /= 100;
+    // --- Pool swims: sets from lengths ---
+    if (disc === 'Swim' && lengths && lengths.length >= 4 && fin(lengths[0].t)) {
+      var L = lengths.slice().sort(function (x, y) { return x.t - y.t; }); if (!(pool > 0)) pool = 25;
+      var gap = L.map(function (l, i) { return i < L.length - 1 ? L[i + 1].t - (l.t + l.dur) : null; }), sets = [], cur = null;
+      L.forEach(function (l, i) {
+        if (!cur || gap[i - 1] > 8) { cur = { ix: [] }; sets.push(cur); }
+        cur.ix.push(i);
+      });
+      sets = sets.map(function (g) {
+        var cnt = {}; g.ix.forEach(function (i) { var k = L[i].stroke || ''; cnt[k] = (cnt[k] || 0) + 1; });
+        var st2 = Object.keys(cnt).sort(function (x, y) { return cnt[y] - cnt[x]; })[0] || '';
+        return { start: L[g.ix[0]].t - L[0].t, dur: sum(g.ix.map(function (i) { return L[i].dur; })), dist: g.ix.length * pool, rest: gap[g.ix[g.ix.length - 1]], stroke: st2 };
+      });
+      // A single lone length between sets is usually a pause mid-set, not a set of its own.
+      while (sets.length > 2 && sets.some(function (x) { return x.dist <= pool; })) {
+        var k = sets.findIndex(function (x) { return x.dist <= pool; }), j = k > 0 ? k - 1 : k + 1, lo2 = Math.min(k, j), hi2 = Math.max(k, j);
+        sets[lo2].dur += sets[hi2].dur; sets[lo2].dist += sets[hi2].dist; sets[lo2].rest = sets[hi2].rest; sets.splice(hi2, 1);
+      }
+      sets.forEach(function (x, i) { x.out = x.dist / Math.max(x.dur, 1); x.kind = sets.length >= 3 ? (i === 0 ? 'Warm-up' : i === sets.length - 1 ? 'Cool-down' : 'Set') : 'Main'; x.hr = null; x.max_hr = null; x.end = x.start + x.dur; });
+      var main = sets.filter(function (x) { return x.kind === 'Set' || x.kind === 'Main'; });
+      var swimType = sets.length < 3 ? 'Endurance' : main.every(function (x) { return x.dist >= 300; }) ? 'Tempo' : main.every(function (x) { return x.dist <= 250; }) ? 'Speed' : 'Mixed';
+      var runs = rle(main.map(function (x) { return x.dist; })), parts = runs.map(function (r) { return r.n > 1 ? sprintf('%d × %.0f m', r.n, r.v) : sprintf('%.0f m', r.v); });
+      var wu = sets.filter(function (x) { return x.kind === 'Warm-up'; }), cd = sets.filter(function (x) { return x.kind === 'Cool-down'; });
+      var total = sum(sets.map(function (x) { return x.dist; }));
+      var body = swimType === 'Endurance' ? fmtThousands(total) + ' m' + (sets.length > 1 ? ' in one (one short pause)' : ' continuous') : parts.join(' + ');
+      var label = swimType + ' swim: ' + [wu.length ? sprintf('Warm-up %.0f m', wu[0].dist) : null, body, cd.length ? sprintf('Cool-down %.0f m', cd[0].dist) : null].filter(Boolean).join(' · ');
+      var top = runs.reduce(function (b, r) { return !b || r.n > b.n ? r : b; }, null), reps = top ? top.n : 0;
+      var mdist = sum(main.map(function (x) { return x.dist; })), mdur = sum(main.map(function (x) { return x.dur; }));
+      return { swim_type: swimType, rep_dist: main.length ? median(main.map(function (x) { return x.dist; })) : null, rep_label: reps >= 2 && swimType !== 'Endurance' ? sprintf('%d × %.0f m', reps, top.v) : null,
+        segments: sets, splits: null, source: 'pool lengths recorded by your watch', unit: 'swim', label: label,
+        n_work: swimType !== 'Endurance' ? main.length : 0, work_dur: main.length ? median(main.map(function (x) { return x.dur; })) : null, work_dist: main.length ? median(main.map(function (x) { return x.dist; })) : null,
+        work_out: main.length ? mdist / mdur : null, work_hr: null, main_out: main.length ? mdist / mdur : null, main_hr: null, wu_dur: sum(wu.map(function (x) { return x.dur; })), cd_dur: sum(cd.map(function (x) { return x.dur; })), total_dist: total };
+    }
+    if (!st || st.n < 120) return null;
+    var n = st.n, nonNull = function (x) { return x.filter(fin).length; };
+    var dist = null;
+    if (nonNull(st.distance) > n / 2) { dist = locfNocb(st.distance); for (var i = 1; i < n; i++) if (dist[i] < dist[i - 1]) dist[i] = dist[i - 1]; }
+    var hasPw = disc === 'Bike' && st.power.filter(function (v) { return v > 0; }).length > 0.5 * n;
+    var o = hasPw ? zeros(st.power) : disc === 'Run' && nonNull(st.speed) > n / 2 ? gapSeries(st) : nonNull(st.speed) > n / 2 ? zeros(st.speed) : zeros(st.hr);
+    var unit = hasPw ? 'W' : nonNull(st.speed) > n / 2 ? 'm/s' : 'bpm', hr = st.hr;
+    // Segment from 0-based inclusive indices [s, e].
+    function segFrom(s0, e0, kind) {
+      var dur = e0 - s0 + 1, d = dist ? dist[e0] - dist[Math.max(s0 - 1, 0)] : null, hs = hr.slice(s0, e0 + 1);
+      return { kind: kind, start: s0, end: e0 + 1, dur: dur, dist: d, out: unit === 'm/s' && d > 0 ? d / dur : mean(o.slice(s0, e0 + 1)), hr: mean(hs), max_hr: max(hs), rest: null, stroke: '' };
+    }
+    var segs = null, source = '';
+    var lapIdx = function () {
+      var i1 = laps.map(function (l) { return Math.max(1, countLE(st.t, l.t)); }), i2 = i1.map(function (x, k) { return k < i1.length - 1 ? i1[k + 1] - 1 : n; });
+      return { i1: i1, i2: i2 };
+    };
+    // 1) Structured workout steps from the watch.
+    if (laps && laps.length >= 2 && laps.some(function (l) { return ['warmup', 'cooldown', 'rest', 'recovery'].indexOf(l.intensity) >= 0; })) {
+      var li = lapIdx(); segs = [];
+      laps.forEach(function (l, k) {
+        if (!(li.i2[k] > li.i1[k])) return;
+        var kind = l.intensity === 'warmup' ? 'Warm-up' : l.intensity === 'cooldown' ? 'Cool-down' : (l.intensity === 'rest' || l.intensity === 'recovery') ? 'Recovery' : 'Work';
+        segs.push(segFrom(li.i1[k] - 1, li.i2[k] - 1, kind));
+      });
+      source = 'workout steps from your watch';
+      if (!segs.length) segs = null;
+    }
+    // 2) Lap-button laps (not automatic distance / time laps).
+    if (!segs && laps && laps.filter(function (l) { return l.trigger === 'manual'; }).length >= 3) {
+      var lj = lapIdx(), tmp = [];
+      laps.forEach(function (l, k) { if (lj.i2[k] - lj.i1[k] >= 10) tmp.push(segFrom(lj.i1[k] - 1, lj.i2[k] - 1, 'Main')); });
+      var km = twoMeans(tmp.map(function (x) { return x.out; }));
+      if (km && km.hi / km.lo >= 1.12) { var kinds = labelBlocks(tmp.map(function (x) { return x.out >= km.thr; })); tmp.forEach(function (x, q) { x.kind = kinds[q]; }); }
+      if (tmp.length) { segs = tmp; source = 'laps you marked with the lap button'; }
+    }
+    // 3) Steady session: find a slower warm-up and cool-down around the main block.
+    if (!segs) {
+      var midSlice = o.slice(Math.max(1, Math.floor(n * 0.3)) - 1, Math.max(2, Math.floor(n * 0.7))), mid = median(midSlice);
+      var m2 = new Array(n), sAcc = 0;
+      for (i = 0; i < n; i++) m2[i] = o[i];
+      for (i = 0; i < n; i++) { sAcc += o[i]; if (i >= 120) sAcc -= o[i - 120]; if (i >= 119) m2[i - 60] = sAcc / 120; }
+      var wuN = 0, cdN = n, limWu = Math.min(Math.floor(n * 0.3), 1200), thr94 = 0.94 * mid, hitW = -1;
+      for (i = 0; i < limWu; i++) if (m2[i] >= thr94) { hitW = i + 1; break; }
+      if (hitW >= 180 && m2[0] < thr94) wuN = hitW;
+      var tStart = Math.max(wuN + 1, n - Math.min(Math.floor(n * 0.25), 900)), lastHit = -1;
+      for (i = tStart; i <= n; i++) if (m2[i - 1] >= thr94) lastHit = i;
+      if (lastHit > 0 && n - lastHit >= 180 && m2[n - 1] < thr94) cdN = lastHit;
+      segs = [];
+      if (wuN > 0) segs.push(segFrom(0, wuN - 1, 'Warm-up'));
+      segs.push(segFrom(wuN, cdN - 1, 'Main'));
+      if (cdN < n) segs.push(segFrom(cdN, n - 1, 'Cool-down'));
+      source = 'detected from your pace/power';
+    }
+    // Merge back-to-back warm-up / cool-down / steady pieces.
+    if (segs.length > 1) {
+      var merged = [];
+      segs.forEach(function (x, q) {
+        var prevS = merged[merged.length - 1];
+        if (q > 0 && prevS && x.kind === prevS.kind && ['Warm-up', 'Cool-down', 'Main'].indexOf(x.kind) >= 0) {
+          var w = prevS.dur, w2 = x.dur;
+          prevS.end = x.end; prevS.dist = (prevS.dist || 0) + (x.dist || 0); prevS.dur = w + w2;
+          prevS.out = unit === 'm/s' && prevS.dist > 0 ? prevS.dist / prevS.dur : (prevS.out * w + x.out * w2) / (w + w2);
+          prevS.hr = fin(prevS.hr) && fin(x.hr) ? (prevS.hr * w + x.hr * w2) / (w + w2) : or(prevS.hr, x.hr);
+          prevS.max_hr = max([prevS.max_hr, x.max_hr]);
+        } else merged.push(Object.assign({}, x));
+      });
+      segs = merged;
+    }
+    // Splits: every km for runs, 5 km for rides, 500 m for open-water swims.
+    var stepD = { Run: 1000, Bike: 5000, Swim: 500 }[disc], splits = null;
+    if (stepD && dist && dist[n - 1] >= stepD) {
+      var marks = []; for (var mk = stepD; mk <= dist[n - 1]; mk += stepD) marks.push(mk);
+      var idx = [0].concat(marks.map(function (x) { return Math.min(countLE(dist, x - 1e-9) + 1, n); }));
+      if (dist[n - 1] - marks[marks.length - 1] >= stepD * 0.2) idx.push(n);
+      splits = [];
+      for (var k2 = 0; k2 < idx.length - 1; k2++) {
+        var i1 = idx[k2] + 1, i2 = idx[k2 + 1]; if (i2 <= i1) continue;
+        var dd = dist[i2 - 1] - dist[Math.max(i1 - 1, 1) - 1], du = i2 - i1 + 1;
+        splits.push({ n: k2 + 1, dist: dd, dur: du, out: dd / du, hr: mean(hr.slice(i1 - 1, i2)), power: hasPw ? mean(o.slice(i1 - 1, i2)) : null });
+      }
+    }
+    var work = segs.filter(function (x) { return x.kind === 'Work'; }), mainS = segs.filter(function (x) { return x.kind === 'Main' || x.kind === 'Work'; });
+    var wmean = function (v, w) { var a2 = 0, b2 = 0; v.forEach(function (x, q) { if (fin(x)) { a2 += x * w[q]; b2 += w[q]; } }); return b2 ? a2 / b2 : null; };
+    function fmtRep() {
+      var wd = median(work.map(function (x) { return x.dur; })), wdist = median(work.map(function (x) { return x.dist; }));
+      var rd = [200, 400, 500, 800, 1000, 1200, 1500, 1600, 2000, 3000, 5000];
+      if (disc === 'Run' && fin(wdist) && wdist > 150) {
+        var near = rd.reduce(function (b, x) { return Math.abs(x - wdist) < Math.abs(b - wdist) ? x : b; });
+        if (Math.abs(near - wdist) / near < 0.08) return near >= 1000 ? (near / 1000) + ' km' : near + ' m';
+      }
+      return wd >= 60 ? fmtDur(Math.round(wd / 15) * 15) : Math.round(wd) + 's';
+    }
+    var rec2 = segs.filter(function (x) { return x.kind === 'Recovery'; });
+    var lab = work.length >= 2 ? sprintf('%d × %s%s', work.length, fmtRep(), rec2.length ? ' (' + fmtDur(Math.round(median(rec2.map(function (x) { return x.dur; })) / 15) * 15) + ' recoveries)' : '')
+      : work.length === 1 ? fmtDur(Math.round(work[0].dur / 60) * 60) + ' tempo block' : 'Steady';
+    var wuS = segs.filter(function (x) { return x.kind === 'Warm-up'; }), cdS = segs.filter(function (x) { return x.kind === 'Cool-down'; });
+    lab = [wuS.length ? 'Warm-up ' + fmtDur(sum(wuS.map(function (x) { return x.dur; }))) : null, lab, cdS.length ? 'Cool-down ' + fmtDur(sum(cdS.map(function (x) { return x.dur; }))) : null].filter(Boolean).join(' · ');
+    if (disc === 'Swim') lab = 'Endurance swim: ' + (dist ? fmtThousands(Math.round(dist[n - 1] / 10) * 10) + ' m continuous' : lab);
+    return { swim_type: disc === 'Swim' ? 'Endurance' : null, segments: segs, splits: splits, source: source, unit: unit, label: lab,
+      rep_label: work.length >= 2 && disc !== 'Swim' ? sprintf('%d × %s', work.length, fmtRep()) : null,
+      n_work: work.length >= 2 && disc !== 'Swim' ? work.length : 0, work_dur: work.length ? median(work.map(function (x) { return x.dur; })) : null, work_dist: work.length ? median(work.map(function (x) { return x.dist; })) : null,
+      work_out: wmean(work.map(function (x) { return x.out; }), work.map(function (x) { return x.dur; })), work_hr: wmean(work.map(function (x) { return x.hr; }), work.map(function (x) { return x.dur; })),
+      main_out: wmean(mainS.map(function (x) { return x.out; }), mainS.map(function (x) { return x.dur; })), main_hr: wmean(mainS.map(function (x) { return x.hr; }), mainS.map(function (x) { return x.dur; })),
+      wu_dur: sum(wuS.map(function (x) { return x.dur; })), cd_dur: sum(cdS.map(function (x) { return x.dur; })), total_dist: dist ? dist[n - 1] : null };
+  };
+
+  // --- Routes: GPS tracks ([t, lat, lon]) resampled for comparing sessions on the same route ---
+  function routeSig(r) {
+    if (!r) return null;
+    r = r.filter(function (p) { return fin(p[1]) && fin(p[2]) && Math.abs(p[1]) > 0.01; });
+    if (r.length < 5) return null;
+    var lat0 = mean(r.map(function (p) { return p[1]; })) * Math.PI / 180, d = [0], pts = [r[0]];
+    for (var i = 1; i < r.length; i++) {
+      var dx = (r[i][2] - pts[pts.length - 1][2]) * 111320 * Math.cos(lat0), dy = (r[i][1] - pts[pts.length - 1][1]) * 110540, step = Math.sqrt(dx * dx + dy * dy);
+      if (step > 0) { d.push(d[d.length - 1] + step); pts.push(r[i]); }   // drop repeated fixes (standing still)
+    }
+    var len = d[d.length - 1], start = [pts[0][1], pts[0][2]];
+    if (len < 100 || pts.length < 2) return { start: start, pts: null, len: len };
+    var out = [], j = 0;
+    for (var k = 0; k < 40; k++) {
+      var at = len * k / 39; while (j < d.length - 2 && d[j + 1] < at) j++;
+      var f = d[j + 1] > d[j] ? (at - d[j]) / (d[j + 1] - d[j]) : 0;
+      out.push([pts[j][1] + f * (pts[j + 1][1] - pts[j][1]), pts[j][2] + f * (pts[j + 1][2] - pts[j][2])]);
+    }
+    return { start: start, end: [pts[pts.length - 1][1], pts[pts.length - 1][2]], len: len, pts: out };
+  }
+  A.routeSig = routeSig;
+  function geoDist(a, b) { var lat0 = (a[0] + b[0]) / 2 * Math.PI / 180; var x = (a[1] - b[1]) * 111320 * Math.cos(lat0), y = (a[0] - b[0]) * 110540; return Math.sqrt(x * x + y * y); }
+  function sameRoute(r1, r2) {
+    if (!r1 || !r2 || geoDist(r1.start, r2.start) > 400) return false;
+    if (!r1.pts || !r2.pts) return true;
+    var dd = function (p, q) { return mean(p.map(function (x, i) { return geoDist(x, q[i]); })); };
+    return Math.min(dd(r1.pts, r2.pts), dd(r1.pts, r2.pts.slice().reverse())) <= 250;
+  }
+  function routeShape(rt) {
+    if (!rt || !rt.pts) return '';
+    var lat0 = rt.start[0] * Math.PI / 180, dx = rt.pts.map(function (p) { return (p[1] - rt.start[1]) * 111320 * Math.cos(lat0); }), dy = rt.pts.map(function (p) { return (p[0] - rt.start[0]) * 110540; });
+    var k = 0; dx.forEach(function (v, i) { if (v * v + dy[i] * dy[i] > dx[k] * dx[k] + dy[k] * dy[k]) k = i; });
+    if (Math.sqrt(dx[k] * dx[k] + dy[k] * dy[k]) < 300) return 'laps';
+    var dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+    var ang = ((Math.atan2(dx[k], dy[k]) * 180 / Math.PI) % 360 + 360) % 360, dir = dirs[Math.round(ang / 45) % 8];
+    var closes = rt.end && geoDist(rt.start, rt.end) < 300, n = rt.pts.length, hh = Math.floor(n / 2), mir = [];
+    for (var i = 0; i < hh; i++) mir.push(geoDist(rt.pts[i], rt.pts[n - 1 - i]));
+    return closes && mean(mir) < 120 ? 'out-and-back to the ' + dir : closes ? 'loop heading ' + dir : 'point-to-point, ' + dir;
+  }
+  function place(nm) {
+    var p = String(nm || '').replace(/\s*[-:]?\s*(open water swimming|pool swim|trail running|road cycling|indoor cycling|running|cycling|swimming|walking|multisport|ride|run|swim)\b.*$/i, '').trim();
+    return p || 'Same';
+  }
+
+  // Similar sessions: group repeats of the same workout and track how they change. sb: session breakdown rows.
+  A.sessionFamilies = function (sb, feats) {
+    if (!sb || !sb.length) return { assign: {}, families: [] };
+    sb = sb.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    var easy = function (t) { return ['Endurance', 'Recovery', 'Grey zone', 'Short'].indexOf(t) >= 0 ? 'Easy' : t; };
+    var fam = {}, reps = {}, order = [];
+    var ratioOk = function (a, b, lo, hi) { return fin(a) && fin(b) && b > 0 && a / b >= lo && a / b <= hi; };
+    sb.forEach(function (row) {
+      var f = feats[row.id] || {}, s = f.structure || {}, rt = f.route || null;
+      var x = { disc: row.discipline, type: easy(row.type), dur: row.moving_s, unit: s.unit || '', n: s.n_work || 0, wd: or(s.work_dur, null), dist: or(s.total_dist, null),
+        env: row.swim_env || '', stype: s.swim_type || 'Endurance', rep_dist: or(s.rep_dist, null), route: rt, has_route: !!(rt && rt.pts), name: row.name };
+      if (x.type === 'Easy' && x.disc !== 'Swim') x.n = 0;   // strides in an easy run don't make it an interval session
+      if (x.disc === 'Swim') x.n = x.stype === 'Endurance' ? 0 : Math.max(2, x.n);
+      var hit = null;
+      for (var q = 0; q < order.length && !hit; q++) {
+        var r = reps[order[q]];
+        if (r.disc !== x.disc || r.unit !== x.unit) continue;
+        var ok;
+        if (x.disc === 'Swim') ok = x.env === r.env && x.stype === r.stype && ratioOk(x.dist, r.dist, 0.8, 1.25) &&
+          (['Tempo', 'Speed'].indexOf(x.stype) < 0 || ratioOk(x.rep_dist, r.rep_dist, 0.6, 1.67)) &&
+          (x.env !== 'Open water' || !x.route || !r.route || geoDist(x.route.start, r.route.start) <= 1000);
+        else if (x.n >= 2 && r.n >= 2) ok = Math.abs(x.n - r.n) <= Math.max(1, Math.round(0.25 * r.n)) && ratioOk(x.wd, r.wd, 0.7, 1.43);
+        else if (x.n < 2 && r.n < 2) ok = x.has_route && r.has_route ? ratioOk(x.dist, r.dist, 0.85, 1.18) && sameRoute(x.route, r.route) : x.type === r.type && ratioOk(x.dur, r.dur, 0.75, 1.33);
+        else ok = false;
+        if (ok) hit = order[q];
+      }
+      if (!hit) { hit = 'F' + (order.length + 1); reps[hit] = x; order.push(hit); }
+      fam[row.id] = hit;
+    });
+    var noun = { Run: 'run', Bike: 'ride', Swim: 'swim', Other: 'session' }, families = [];
+    var title = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); };
+    order.forEach(function (fid) {
+      var m = sb.filter(function (row) { return fam[row.id] === fid; }); if (m.length < 2) return;
+      var st = m.map(function (row) { return ((feats[row.id] || {}).structure) || {}; }), r = reps[fid], d = r.disc, isInt = r.n >= 2;
+      var out = st.map(function (s) { var v = isInt ? s.work_out : s.main_out; return fin(v) && v > 0 ? v : null; });
+      var hrv = st.map(function (s) { return or(isInt ? s.work_hr : s.main_hr, null); });
+      var medDist = median(st.map(function (s) { return s.total_dist; })), medDur = median(m.map(function (row) { return row.moving_s; }));
+      var rd5 = fmtDur(rhe(medDur / 300) * 300), name;
+      if (d === 'Swim') {
+        var where = r.env === 'Open water' ? 'Open-water ' : '';
+        name = r.stype === 'Tempo' ? where + 'Tempo swim' + (st[0].rep_label ? ': ' + st[0].rep_label : '') : r.stype === 'Speed' ? where + 'Speed swim' + (st[0].rep_label ? ': ' + st[0].rep_label : '')
+          : r.stype === 'Mixed' ? where + 'Mixed swim (~' + fmtThousands(rhe(medDist / 100) * 100) + ' m)'
+          : (r.env === 'Open water' ? place(r.name) + ' open-water swim' : 'Endurance swim') + ' (~' + fmtThousands(rhe(medDist / 100) * 100) + ' m)';
+      } else if (isInt) name = (st[0].rep_label || 'Interval') + ' ' + noun[d] + ' intervals';
+      else if (r.has_route) name = place(r.name) + ' ' + (medDist < 20000 ? (rhe(medDist / 100) / 10) : rhe(medDist / 1000)) + ' km ' + noun[d] + ' (' + routeShape(r.route) + ')';
+      else name = { 'Long endurance': 'Long ' + noun[d] + ' (~' + rd5 + ')', Threshold: 'Tempo ' + noun[d] + ' (~' + rd5 + ')', Intervals: 'Hard ' + noun[d] + ' (~' + rd5 + ')' }[r.type] || 'Easy ' + noun[d] + ' (~' + rd5 + ')';
+      name = title(name.replace(/\s+/g, ' ').trim());
+      var eff = out.map(function (v, i) { return fin(v) && fin(hrv[i]) ? v / hrv[i] : null; }), k = out.length;
+      var first = k >= 4 ? [0, 1] : [0], last = k >= 4 ? [k - 2, k - 1] : [k - 1], mo = function (v, ix) { return mean(ix.map(function (i) { return v[i]; })); };
+      var outCh = fin(mo(out, last)) && fin(mo(out, first)) ? (mo(out, last) / mo(out, first) - 1) * 100 : null;
+      var effCh = fin(mo(eff, last)) && fin(mo(eff, first)) ? (mo(eff, last) / mo(eff, first) - 1) * 100 : null, score = fin(effCh) ? effCh : outCh;
+      families.push({ id: fid, name: name, sport: d, interval: isInt, n: k, unit: r.unit,
+        sessions: m.map(function (row, i) { return { id: row.id, parent_id: row.parent_id, date: row.date, name: row.name, moving_s: row.moving_s, tss: row.tss, out: out[i], hr: hrv[i], eff: eff[i] }; }),
+        out_change: outCh, eff_change: effCh, hr_change: fin(mo(hrv, last)) && fin(mo(hrv, first)) ? mo(hrv, last) - mo(hrv, first) : null,
+        out_first: mo(out, first), out_last: mo(out, last), hr_first: mo(hrv, first), hr_last: mo(hrv, last),
+        verdict: !fin(score) ? 'Not comparable' : score > 2 ? 'Improving' : score < -2 ? 'Slipping' : 'Stable' });
+    });
+    var names = {}; families.forEach(function (f) { names[f.name] = (names[f.name] || 0) + 1; });
+    var seen = {}; families.forEach(function (f) { if (names[f.name] > 1) { seen[f.name] = (seen[f.name] || 0) + 1; f.name += ', route ' + 'ABCDEFGHIJ'.charAt(seen[f.name] - 1); } });
+    return { assign: fam, families: families };
+  };
+  // An output value (m/s or W) for display.
+  A.fmtOut = function (v, disc, unit) {
+    if (!fin(v)) return '–';
+    if (unit === 'W') return Math.round(v) + ' W';
+    if (unit === 'bpm') return Math.round(v) + ' bpm';
+    if (disc === 'Run') return fmtPace(1000 / v) + ' /km';
+    if (disc === 'Swim') return fmtPace(100 / v) + ' /100 m';
+    if (disc === 'Bike') return (v * 3.6).toFixed(1) + ' km/h';
+    return v.toFixed(2);
+  };
+
   A.discFor = function (sport) {
     var k = String(sport || '').toLowerCase();
     if (k.indexOf('transition') >= 0) return 'Transition';
@@ -287,9 +573,13 @@
   // One activity's features: the whole file, and each leg of a multisport file.
   A.activityFeatures = function (a, raw) {
     var disc = A.discFor(a.type), rec = { id: a.id, v: A.FEATURE_VERSION, f: null, legs: null };
-    var st = A.cleanStream(raw, disc);
+    var st = A.cleanStream(raw, disc), meta = { discipline: disc, pool_length_m: a.pool_m };
     rec.f = st ? A.streamFeatures(st, disc) : { moving_s: null };
     if (raw && raw.lengths && raw.lengths.length) rec.f.lengths = raw.lengths.map(function (l) { return l.dur; });
+    if (!(raw && raw.legs && raw.legs.length > 1)) {
+      try { rec.f.structure = A.sessionStructure(st, meta, raw && raw.laps, raw && raw.lengths); } catch (e) { rec.f.structure = null; }
+      rec.f.route = routeSig(raw && raw.route);
+    }
     var legs = (raw && raw.legs) || [];
     if (legs.length > 1) {
       var core = legs.filter(function (l) { var d = A.discFor(l.sport); return d === 'Swim' || d === 'Bike' || d === 'Run'; });
@@ -297,7 +587,12 @@
         var d = A.discFor(l.sport), el = num(l.elapsed_s) || num(l.timer_s) || 0;
         var x = { k: k + 1, disc: d, sport: l.sport, sub_sport: l.sub_sport || '', start: l.start || 0, timer_s: num(l.timer_s), elapsed_s: el,
           distance_m: num(l.distance_m), avg_hr: num(l.avg_hr), avg_power: num(l.avg_power), np: num(l.np) };
-        if (d === 'Swim' || d === 'Bike' || d === 'Run') { var ls = A.cleanStream(raw, d, x.start, x.start + el); x.f = ls ? A.streamFeatures(ls, d) : { moving_s: null }; }
+        if (d === 'Swim' || d === 'Bike' || d === 'Run') {
+          var t0 = x.start, t1 = x.start + el, ls = A.cleanStream(raw, d, t0, t1), inLeg = function (q) { return q.t >= t0 - 1 && q.t < t1; };
+          x.f = ls ? A.streamFeatures(ls, d) : { moving_s: null };
+          try { x.f.structure = A.sessionStructure(ls, { discipline: d, pool_length_m: a.pool_m }, (raw.laps || []).filter(inLeg), (raw.lengths || []).filter(function (q) { return q.t >= t0 && q.t < t1; })); } catch (e) { x.f.structure = null; }
+          x.f.route = routeSig((raw.route || []).filter(function (q) { return q[0] >= t0 && q[0] < t1; }));
+        }
         return x;
       });
     }
@@ -421,8 +716,13 @@
     if (sw.some(function (r) { return r.swim_env === 'Pool'; })) sw = sw.filter(function (r) { return r.swim_env === 'Pool'; });
     var recent = sw.filter(function (r) { return r.date >= addDays(lastDate, -112); });
     if (recent.length >= 3) sw = recent;
-    var css, longS = sw.filter(function (r) { return r.distance_m >= 1000; });
-    if (longS.length) { css = max(longS.map(function (r) { return r.distance_m / r.moving_s; })) * 1.02; src.css = 'your fastest recent continuous swim of 1000 m+'; }
+    // A continuous swim of 1000 m+ is swum just slower than CSS; a hard set of 400 m+ a little faster. Fastest wins.
+    var css = null, cand = [], longS = sw.filter(function (r) { return r.distance_m >= 1000; });
+    if (longS.length) cand.push([max(longS.map(function (r) { return r.distance_m / r.moving_s; })) * 1.02, 'your fastest recent continuous swim of 1000 m+']);
+    var setV = [];
+    sw.forEach(function (r) { var g = ((feats[r.id] || {}).structure || {}).segments; if (g && g.some(function (x) { return 'stroke' in x && x.stroke !== ''; })) g.forEach(function (x) { if (x.dist >= 400 && x.dur > 0) setV.push(x.dist / x.dur); }); });
+    if (setV.length) cand.push([max(setV) * 0.97, 'your fastest recent 400 m+ set']);
+    if (cand.length) { var bc = cand.reduce(function (a, b) { return b[0] > a[0] ? b : a; }); css = bc[0]; src.css = bc[1]; }
     else if (sw.length) { css = max(sw.map(function (r) { return r.distance_m / r.moving_s; })); src.css = 'your fastest recent swim'; }
     else { css = 100 / 120; src.css = 'default (no swim data)'; }
 
@@ -533,14 +833,22 @@
   // ===========================================================================
   A.loadModel = function (acts, from, to) {
     if (!acts.length) return [];
-    var tss = {}, first = from;
-    acts.forEach(function (a) { tss[a.date] = (tss[a.date] || 0) + (a.tss || 0); if (a.date < first) first = a.date; });
-    var out = [], c = 0, at = 0, prev = 0, ctlHist = [];
+    var tss = {}, firstAct = null;
+    acts.forEach(function (a) { tss[a.date] = (tss[a.date] || 0) + (a.tss || 0); if (!firstAct || a.date < firstAct) firstAct = a.date; });
+    var first = from < firstAct ? from : firstAct;
+    // Start from the typical daily load of the first four weeks of data rather than zero, so a history that
+    // begins mid-training doesn't read as weeks of sudden load spikes (fitness ~0, fatigue rising fast).
+    // Before the first activity nothing is known, so load is held there and no spikes are counted.
+    var seed = 0, end28 = addDays(firstAct, 27);
+    Object.keys(tss).forEach(function (d) { if (d >= firstAct && d <= end28) seed += tss[d]; });
+    seed /= 28;
+    var out = [], c = seed, at = seed, prev = 0, ctlHist = [];
     for (var d = first; d <= to; d = addDays(d, 1)) {
-      var t = tss[d] || 0;
-      c += (t - c) / 42; at += (t - at) / 7;
+      var known = d >= firstAct, t = tss[d] || 0;
+      if (known) { c += (t - c) / 42; at += (t - at) / 7; }
       ctlHist.push(c);
-      var row = { date: d, tss: t, ctl: c, atl: at, tsb: prev, ramp: ctlHist.length > 7 ? c - ctlHist[ctlHist.length - 8] : null, acwr: c > 10 ? at / c : null, week: weekStart(d) };
+      var row = { date: d, tss: t, ctl: c, atl: at, tsb: prev, ramp: known && ctlHist.length > 7 && addDays(d, -7) >= firstAct ? c - ctlHist[ctlHist.length - 8] : null,
+        acwr: known && c > 10 ? at / c : null, week: weekStart(d) };
       prev = c - at;
       if (d >= from) out.push(row);
     }
@@ -947,7 +1255,9 @@
     var ctl0 = load[0].ctl, peakRow = pre.length ? pre.reduce(function (a, b) { return b.ctl > a.ctl ? b : a; }) : load[0], ctlPeak = peakRow.ctl;
     var ctlRace = pre.length ? pre[pre.length - 1].ctl : ctl0, tsbRace = load[load.length - 1].tsb;
     var gain = ctl0 > 5 ? (ctlPeak / ctl0 - 1) * 100 : ctlPeak > 20 ? 40 : 0, comp = {};
-    comp.fitness = clamp(40 + 2.4 * gain);
+    // Fitness gain needs ~6 weeks of data before the block to know where fitness started.
+    var shortHist = !!ctx.historyStart && ctx.historyStart > addDays(start, -42);
+    comp.fitness = shortHist ? null : clamp(40 + 2.4 * gain);
     var wk = train.weekly, weeksOk = wk.length ? wk.filter(function (w) { return w.sessions >= 3; }).length / wk.length : 0;
     var ud = Object.keys(by(acts, 'date')).sort(), longGaps = 0;
     for (i = 1; i < ud.length; i++) if (days(ud[i - 1], ud[i]) > 7) longGaps++;
@@ -985,7 +1295,12 @@
     comp.recovery = out.recovery ? out.recovery.score : null;
     out.sessions = sessionBreakdown(acts, load, ctx.wellness, discs, race, review.sport, raceRows, feats, prof);
     var raceH = raceRows.length ? sum(raceRows.map(function (a) { return or(a.race_s, a.moving_s); })) / 3600 : fin(review.goal_s) ? review.goal_s / 3600 : null;
+    out.families = A.sessionFamilies(out.sessions, feats);
     out.sport_impact = sportImpact(acts, scored, feats, discs, start, race, out.sessions, raceH);
+    out.sport_impact.forEach(function (sp) { sp.families = out.families.families.filter(function (f) { return f.sport === sp.sport; }); });
+    // Fitness and load are only judged reliably with ~6 weeks of Garmin data before the block.
+    out.history_from = ctx.historyStart || null;
+    out.short_history = shortHist;
     var W = { fitness: 0.2, consistency: 0.15, load_safety: 0.1, intensity: 0.15, specificity: 0.1, taper: 0.2, recovery: 0.1 }, tw = 0, ts = 0;
     out.components = {};
     Object.keys(W).forEach(function (k) { out.components[k] = comp[k]; if (fin(comp[k])) { ts += comp[k] * W[k]; tw += W[k]; } });
@@ -1043,7 +1358,8 @@
 
   function blockFindings(b) {
     var good = [], change = [], c = b.components, tp = b.taper;
-    if (c.fitness >= 75) good.push(sprintf('Fitness rose %.0f%% (CTL %.0f → %.0f peak) - the block delivered a real training stimulus.', tp.gain_pct, tp.ctl0, tp.ctl_peak));
+    if (!fin(c.fitness)) change.push(sprintf('Your Garmin data starts %s, so where fitness began this block can’t be measured. Sync from %s (6 weeks before the block) for the fitness gain and a fuller review.', TP.fmt(b.history_from, '%d %b %Y'), TP.fmt(addDays(b.start, -42), '%d %b %Y')));
+    else if (c.fitness >= 75) good.push(sprintf('Fitness rose %.0f%% (CTL %.0f → %.0f peak) - the block delivered a real training stimulus.', tp.gain_pct, tp.ctl0, tp.ctl_peak));
     else change.push(sprintf('Fitness only rose %.0f%% (CTL %.0f → %.0f). Next block: progress load by 3-5 CTL per week through the build phase.', tp.gain_pct, tp.ctl0, tp.ctl_peak));
     if (c.consistency >= 80) good.push('Training was consistent week to week, the single biggest driver of endurance gains.');
     else change.push('Consistency was the limiter - missed weeks or breaks of more than a week. Plan for realistic weekly availability before adding intensity.');
@@ -1114,7 +1430,18 @@
 
   // Which sessions built fitness, which did little or harm.
   var TYPE_W = { Intervals: 1.3, Threshold: 1.25, 'Long endurance': 1.3, Endurance: 1, Recovery: 0.5, Short: 0.4, 'Grey zone': 0.75, Tempo: 1.2, Speed: 1.25, Mixed: 1.15 };
-  function sessionBreakdown(acts, load, wellness, discs, race, sport, raceRows) {
+  // Longest continuous stretch (seconds) of splits at tempo effort or harder.
+  function tempoSeconds(f, disc, prof) {
+    var sp = ((f || {}).structure || {}).splits; if (!sp || !sp.length) return 0;
+    var best = 0, run = 0;
+    sp.forEach(function (x) {
+      var hard = (fin(x.hr) && fin(prof.lthr) && x.hr >= 0.89 * prof.lthr) || (disc === 'Bike' && fin(x.power) && fin(prof.ftp) && x.power >= 0.76 * prof.ftp);
+      run = hard ? run + x.dur : 0; if (run > best) best = run;
+    });
+    return best;
+  }
+  function sessionBreakdown(acts, load, wellness, discs, race, sport, raceRows, feats, prof) {
+    feats = feats || {}; prof = prof || {};
     var a = acts.filter(function (x) { return x.date < race && ['Swim', 'Bike', 'Run', 'Other'].indexOf(x.discipline) >= 0; }).map(function (x) { return Object.assign({}, x); });
     if (!a.length) return null;
     var g = by(a, 'discipline'), medH = {}, medT = {}, medEf = {};
@@ -1124,11 +1451,18 @@
     var raceOw = (raceRows || []).some(function (r) { return r.swim_env === 'Open water'; });
     a.forEach(function (x) {
       var tot = x.z1 + x.z2 + x.z3, z1p = tot > 0 ? x.z1 / tot : null, z2p = tot > 0 ? x.z2 / tot : null, ifx = fin(x.intensity) ? x.intensity : 0.7;
-      x.type = x.z2 >= 1200 && or(z2p, 0) >= 0.35 && ifx >= 0.83 ? 'Threshold'
+      // Intervals only when the reps were entered as laps / workout steps; tempo from 15 min+ of splits at tempo effort.
+      var stc = (feats[x.id] || {}).structure || {};
+      x.type = (stc.n_work || 0) >= 2 ? 'Intervals'
+        : tempoSeconds(feats[x.id], x.discipline, prof) >= 900 && (x.discipline === 'Run' || x.discipline === 'Bike') ? 'Tempo'
+        : x.z2 >= 1200 && or(z2p, 0) >= 0.35 && ifx >= 0.83 ? 'Threshold'
         : x.hours >= Math.max(1.5 * medH[x.discipline], 1) && or(z1p, 1) >= 0.6 ? 'Long endurance'
         : x.hours < 0.42 && x.tss < 25 ? 'Short' : ifx < 0.68 && x.hours <= 1 ? 'Recovery' : or(z1p, 1) >= 0.75 ? 'Endurance' : 'Grey zone';
-      if (x.z3 >= 600 && x.type !== 'Long endurance') x.type = 'Intervals';
-      if (x.discipline === 'Swim' && x.type === 'Grey zone') x.type = 'Endurance';
+      // Swims are typed by their sets: endurance, tempo (main sets 300 m+), speed (250 m or less) or mixed.
+      if (x.discipline === 'Swim') {
+        var stype = stc.swim_type || null;
+        x.type = !stype ? (x.type === 'Grey zone' ? 'Endurance' : x.type) : stype === 'Endurance' && x.type === 'Long endurance' ? 'Long endurance' : stype;
+      }
       x.brick = ['Brick', 'Triathlon', 'Duathlon'].indexOf(x.group_label) >= 0;
       x.ef_q = fin(x.ef) && fin(medEf[x.discipline]) ? x.ef / medEf[x.discipline] - 1 : 0;
       x.tsb = tsbBy[x.date]; x.sleep_before = sleepBy[x.date];
@@ -1143,7 +1477,13 @@
       if (x.type === 'Intervals') gd.push(sprintf('%.0f min above threshold: a strong VO2max/threshold stimulus', x.z3 / 60));
       if (x.type === 'Threshold') gd.push(x.discipline === 'Swim' ? sprintf('swum at %.0f%% of CSS pace: threshold swim work', x.ifx * 100) : sprintf('%.0f min at tempo/threshold: builds sustainable race pace', x.z2 / 60));
       if (x.type === 'Long endurance') gd.push(sprintf('long %s (%s)%s: builds endurance and durability', x.discipline.toLowerCase(), fmtDur(x.moving_s), fin(x.decoupling) && x.decoupling < 5 ? sprintf(' with only %.1f%% decoupling', x.decoupling) : ''));
-      if (x.type === 'Endurance' && x.discipline === 'Swim' && x.hours >= 0.5) gd.push(sprintf('%.0f m swum: builds swim endurance', x.distance_m));
+      if (x.discipline === 'Swim' && ['Tempo', 'Speed', 'Mixed', 'Endurance'].indexOf(x.type) >= 0) {
+        var ss = (feats[x.id] || {}).structure || {};
+        if (x.type === 'Tempo') gd.push('tempo swim (' + (ss.rep_label || 'long main sets') + '): main sets of 300 m+ build sustained race pace');
+        else if (x.type === 'Speed') gd.push('speed swim (' + (ss.rep_label || 'short repeats') + '): short fast repeats build top-end speed and stroke rate');
+        else if (x.type === 'Mixed') gd.push('mixed swim: long and short main sets work both endurance and speed');
+        else if (x.hours >= 0.5) gd.push(sprintf('%.0f m swum in one: builds swim endurance', or(ss.total_dist, x.moving_s)));
+      }
       if (x.brick) gd.push('brick (run off the bike): race-specific');
       if (raceOw && x.swim_env === 'Open water') gd.push('open-water swim: race-specific');
       if (x.ef_q > 0.04) gd.push(sprintf('efficiency %.0f%% above your norm: high-quality execution', x.ef_q * 100));
@@ -1163,6 +1503,8 @@
     });
     return a;
   }
+  // Session breakdown outside a block review (an activity's page): discs = the sport itself.
+  A.sessionBreakdownFor = function (acts, load, wellness, discs, race, sport, feats, prof) { return sessionBreakdown(acts, load, wellness, discs, race, sport, null, feats, prof); };
   A.topSessions = function (sb, n, disc) {
     if (!sb) return { best: [], worst: [] };
     var s = disc ? sb.filter(function (x) { return x.discipline === disc; }) : sb;
@@ -1483,7 +1825,7 @@
     var direct = acts.length ? sum(acts.filter(function (a) { return discs.indexOf(a.discipline) >= 0; }).map(function (a) { return a.hours; })) / totH : null;
     var dist = acts.length ? distOf(acts) : null, recov = A.recovery(ctx.wellness, hist, start, to);
     var last7 = (ctx.wellness || []).filter(function (x) { return x.date > addDays(to, -7) && x.date <= to; });
-    var sb = sessionBreakdown(acts, hist, ctx.wellness, discs, addDays(to, 1), raceType, null);
+    var sb = sessionBreakdown(acts, hist, ctx.wellness, discs, addDays(to, 1), raceType, null, ctx.feats, ctx.prof);
     var si = days(start, to) >= 21 && acts.length >= 6 ? sportImpact(acts, scored, ctx.feats, discs, start, addDays(to, 15), sb, fin(goalS) ? goalS / 3600 : null) : [];
     var good = [], watch = [];
     if (ramp > 8) watch.push(sprintf('Fitness is climbing %.1f a week, faster than the ~8 a week most athletes can absorb safely. Ease the next build week.', ramp));

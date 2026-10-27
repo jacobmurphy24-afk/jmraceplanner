@@ -8,7 +8,9 @@
     document.querySelectorAll('button[data-page]').forEach(function (b) { b.classList.toggle('on', b.dataset.page === v.page); b.setAttribute('aria-current', b.dataset.page === v.page ? 'page' : 'false'); });
     document.querySelectorAll('button[data-mode]').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === v.mode); });
     document.body.dataset.page = v.page;
-    if (v.page === 'calendar') {
+    if (TP.renderStackTop(main)) {
+      // a full-page view (an activity, a sport) is open on top of the page
+    } else if (v.page === 'calendar') {
       var cal = h('div', { class: 'cal cal-' + v.mode.toLowerCase() });
       if (v.mode === 'Month') TP.renderMonth(cal); else TP.renderYear(cal);
       main.appendChild(cal);
@@ -23,7 +25,7 @@
   };
 
 
-  TP.go = function (page) { TP.view.page = page; TP.view.review = null; TP.closeMenu(); TP.render(); window.scrollTo(0, 0); };
+  TP.go = function (page) { TP.view.page = page; TP.view.review = null; TP.view.stack = []; TP.closeMenu(); TP.render(); window.scrollTo(0, 0); };
   TP.setMode = function (mode) { TP.view.page = 'calendar'; TP.view.mode = mode; TP.render(); };
   TP.closeMenu = function () { document.body.classList.remove('menu-open'); };
 
@@ -87,6 +89,7 @@
     if (!TP.cloud.enabled) TP.garmin.setUser(null);   // no accounts configured: this device's Garmin data
     TP.render();
     TP.startUnits();
+    TP.startGlossary();
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
       // When an update takes over from the version already running, reload once to show it,
       // unless a form is open, so nothing being typed is lost.

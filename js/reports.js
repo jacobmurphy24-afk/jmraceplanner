@@ -184,7 +184,7 @@
     if (hasGarmin && rb.status !== 'Upcoming') tabList.push({ value: 'Progress', label: rb.status === 'Completed' ? 'How it went' : 'Progress' });
     tabList.push({ value: 'Plan advice', label: 'Plan advice' });
 
-    var m = TP.modal({ size: 'xl',
+    var m = TP.modal({ size: 'xl', cls: 'gloss',
       title: h('div', { class: 'rp-m-head', style: '--c:' + rb.col },
         h('div', null, h('div', { class: 'rp-type' }, rb.p.race_type.toUpperCase()), h('div', { class: 'md-t' }, rb.name),
           h('div', { class: 'rp-dates' }, TP.fmt(rb.start, '%d %b %Y') + ' – ' + TP.fmt(rb.race_date, '%d %b %Y') + ' · ' + rb.n + ' weeks · ' +

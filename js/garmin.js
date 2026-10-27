@@ -5,6 +5,7 @@
 (function (TP) {
   var h = TP.h;
   var RELAY = 'https://garmin.jmraceplanner.co.uk';
+  var FIT_VERSION = 2;   // 2: FIT files also give the route, laps and swim lengths
   var KEY = 'tp-garmin-key', TOKEN = 'tp-garmin-token', RANGE = 'tp-garmin-range', RANGES = 'tp-garmin-ranges', PROFILE = 'tp-garmin-profile';
   var G = TP.garmin = { acts: [], frecs: {}, wellness: [], loaded: false, syncing: null, prep: null, ver: 0 };
   var uid = null;
@@ -178,8 +179,10 @@
     var dec = new FIT.Decoder(FIT.Stream.fromByteArray(Array.from(bytes)));
     var res = dec.read({ convertDateTimesToDates: true }), m = res.messages, rec = m.recordMesgs || [];
     if (!rec.length) return null;
-    var t0 = rec[0].timestamp.getTime(), col = { t: [], hr: [], power: [], speed: [], cadence: [], distance: [], altitude: [] };
+    var t0 = rec[0].timestamp.getTime(), col = { t: [], hr: [], power: [], speed: [], cadence: [], distance: [], altitude: [] }, route = [];
+    var SEMI = 180 / Math.pow(2, 31), rel = function (d) { return d ? Math.round((d.getTime() - t0) / 1000) : null; };
     rec.forEach(function (r) {
+      if (r.positionLat != null && r.positionLong != null) route.push([Math.round((r.timestamp.getTime() - t0) / 1000), Math.round(r.positionLat * SEMI * 1e6) / 1e6, Math.round(r.positionLong * SEMI * 1e6) / 1e6]);
       col.t.push(Math.round((r.timestamp.getTime() - t0) / 1000));
       col.hr.push(r.heartRate == null ? null : r.heartRate);
       col.power.push(r.power == null ? null : r.power);
@@ -192,8 +195,15 @@
       return { sport: s.sport || '', sub_sport: s.subSport || '', start: s.startTime ? Math.round((s.startTime.getTime() - t0) / 1000) : 0,
         timer_s: s.totalTimerTime, elapsed_s: s.totalElapsedTime, distance_m: s.totalDistance, avg_hr: s.avgHeartRate, avg_power: s.avgPower, np: s.normalizedPower };
     });
-    var lengths = (m.lengthMesgs || []).filter(function (l) { return l.lengthType === 'active'; }).map(function (l) { return { dur: l.totalTimerTime, strokes: l.totalStrokes, stroke: l.swimStroke }; });
-    return Object.assign({ id: id, legs: legs.length > 1 ? legs : [], lengths: lengths }, col);
+    var lengths = (m.lengthMesgs || []).filter(function (l) { return l.lengthType === 'active'; }).map(function (l) { return { t: rel(l.startTime), dur: l.totalTimerTime, strokes: l.totalStrokes, stroke: l.swimStroke || '' }; });
+    // Laps: auto splits, lap-button presses, or structured workout steps (warm-up / active / rest / cool-down).
+    var laps = (m.lapMesgs || []).filter(function (l) { return l.startTime; }).map(function (l) {
+      return { t: rel(l.startTime), dur: l.totalTimerTime, dist: l.totalDistance, speed: l.enhancedAvgSpeed != null ? l.enhancedAvgSpeed : l.avgSpeed, hr: l.avgHeartRate, max_hr: l.maxHeartRate,
+        power: l.avgPower, intensity: String(l.intensity || ''), trigger: String(l.lapTrigger || '') };
+    });
+    // GPS route, thinned to about 1,000 points (enough for the map and for spotting repeated routes).
+    var step = Math.max(1, Math.floor(route.length / 1000)), thin = route.filter(function (p, i) { return i % step === 0 || i === route.length - 1; });
+    return Object.assign({ id: id, v: FIT_VERSION, legs: legs.length > 1 ? legs : [], lengths: lengths, laps: laps, route: thin }, col);
   }
 
   // Dates covered by a sync: a planned session in them with no activity counts as missed.
@@ -286,17 +296,17 @@
     G.syncing = search(from, to).then(function (list) {
       var acts = list.map(summary), byId = {};
       G.acts.forEach(function (a) { byId[a.id] = a; });
-      acts.forEach(function (a) { a.fit = !!(byId[a.id] && byId[a.id].fit); byId[a.id] = a; });
+      acts.forEach(function (a) { var o = byId[a.id]; a.fit = !!(o && o.fit); a.fitv = o && o.fitv; byId[a.id] = a; });
       G.acts = Object.keys(byId).map(function (k) { return byId[k]; }).sort(function (a, b) { return a.start < b.start ? 1 : -1; });
       G.ver++;
       return putAll('acts', acts).then(function () {
         if (!withFit) return { found: acts.length, fit: 0 };
-        var todo = acts.filter(function (a) { return !a.fit; }), done = 0, failed = 0;
+        var todo = acts.filter(function (a) { return !a.fit || (a.fitv || 1) < FIT_VERSION; }), done = 0, failed = 0;
         return todo.reduce(function (chain, a, i) {
           return chain.then(function () {
-            G.progress = 'Downloading FIT files ' + (i + 1) + ' of ' + todo.length + '…'; TP.changed();
+            G.progress = 'Downloading FIT files ' + (i + 1) + ' of ' + todo.length + ' (routes, laps and second-by-second data)…'; TP.changed();
             return api('/download-service/files/activity/' + a.id, true).then(unzip).then(function (bytes) {
-              var st = parseFit(a.id, bytes); a.fit = true;
+              var st = parseFit(a.id, bytes); a.fit = true; a.fitv = FIT_VERSION;
               return (st ? putAll('streams', [st]) : Promise.resolve()).then(function () { done++; delete G.frecs[a.id]; return putAll('acts', [a]); });
             }).catch(function (e) { failed++; console.warn('FIT', a.id, e); if (/limiting/.test(e.message)) throw e; });
           });
@@ -315,6 +325,24 @@
       });
     TP.changed();   // now that a sync is under way: progress shows and the button reads "Syncing…"
     return G.syncing;
+  };
+
+  // Re-download one activity's FIT file (for an activity saved before routes and laps were kept).
+  G.refetch = function (id) {
+    var a = G.acts.filter(function (x) { return x.id === id; })[0];
+    if (!a || !G.connected()) return Promise.reject(new Error('Connect Garmin to load this.'));
+    return api('/download-service/files/activity/' + id, true).then(unzip).then(function (bytes) {
+      var st = parseFit(id, bytes); a.fit = true; a.fitv = FIT_VERSION; delete G.frecs[id];
+      return (st ? putAll('streams', [st]) : Promise.resolve()).then(function () { return putAll('acts', [a]); })
+        .then(function () { return G.prepare(); }).then(function () { return G.frecs[id] ? null : G.prepare(); }).then(function () { return st; });
+    });
+  };
+  G.needsRefetch = function (a) { return a && a.fit && (a.fitv || 1) < FIT_VERSION; };
+  // The first date with Garmin data on this device (the load model needs ~6 weeks before a block).
+  G.historyStart = function () {
+    var r = readLS(RANGES, null) || initialRanges(), first = G.acts.length ? G.acts[G.acts.length - 1].date : null;
+    if (r.length && (!first || r[0][0] < first)) return r[0][0];
+    return first;
   };
 
   // Work out the analysis features of every activity with a FIT file that doesn't have them yet
@@ -348,7 +376,7 @@
     if (cache && cache.key === key) return cache;
     var A = TP.TA, b = A.buildIndex(G.acts, G.frecs), gp = G.profile();
     var prof = A.estimateProfile(b.idx, b.feats, gp, G.wellness, ov);
-    cache = { key: key, idx: b.idx, feats: b.feats, transitions: b.transitions, prof: prof, scored: A.score(b.idx, b.feats, prof),
+    cache = { key: key, historyStart: G.historyStart(), idx: b.idx, feats: b.feats, transitions: b.transitions, prof: prof, scored: A.score(b.idx, b.feats, prof),
       wellness: G.wellness, garminProfile: gp, overrides: ov, compliance: function (f, t, bid) { return TP.match.compliance(f, t, bid); } };
     cache.byId = {}; cache.scored.forEach(function (a) { cache.byId[a.id] = a; });
     return cache;
@@ -363,7 +391,7 @@
   TP.view.gtab = TP.view.gtab || 'Overview';
   TP.renderGarmin = function (root) {
     if (TP.view.review) { TP.blocks.page(root, TP.view.review); return; }
-    root.appendChild(h('div', { class: 'page-head' }, h('h2', null, 'Analysis'),
+    root.appendChild(h('div', { class: 'page-head page-head-row' }, h('h2', null, 'Analysis'), TP.glossaryButton(),
       h('p', { class: 'muted' }, 'Your Garmin activities analysed the way a coach would: training load, fitness and fatigue, intensity, power and pace, and a review of each training block and its race.')));
     if (!G.connected()) root.appendChild(connectCard()); else root.appendChild(syncCard());
     if (!G.loaded) { root.appendChild(h('p', { class: 'muted' }, 'Loading…')); return; }

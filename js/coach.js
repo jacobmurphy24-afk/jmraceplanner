@@ -202,7 +202,7 @@
       body.appendChild(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('thead', null, h('tr', null, h('th', null, 'Sport'), h('th', { class: 'num' }, 'Sessions'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, 'Distance'), h('th', { class: 'num' }, 'TSS'))),
         h('tbody', null, wa.by_sport.map(function (x) { return h('tr', null, h('td', null, h('span', { class: 'sdot', style: 'background:' + CO.sportCol(x.discipline) }), x.discipline), h('td', { class: 'num' }, x.sessions), h('td', { class: 'num' }, x.hours.toFixed(1) + ' h'), h('td', { class: 'num' }, Math.round(x.km) + ' km'), h('td', { class: 'num' }, Math.round(x.tss))); })))));
     }
-    var m = TP.modal({ size: 'l', stack: true, title: h('div', null, CO.verdictChip(wa.verdict), h('div', { class: 'md-t' }, label || 'Week of ' + TP.fmt(wk, '%d %B')),
+    var m = TP.modal({ size: 'l', stack: true, cls: 'gloss', title: h('div', null, CO.verdictChip(wa.verdict), h('div', { class: 'md-t' }, label || 'Week of ' + TP.fmt(wk, '%d %B')),
       h('div', { class: 'md-sub' }, TP.fmt(wk, '%A %d %B') + ' – ' + TP.fmt(TP.addDays(wk, 6), '%A %d %B %Y') + (fin(wa.score) ? ' · score ' + wa.score : ''))),
       body: body, footer: [h('span', { class: 'grow' }), h('button', { class: 'btn btn-primary', onclick: function () { m.close(); } }, 'Close')] });
   };

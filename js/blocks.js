@@ -114,7 +114,8 @@
       h('div', { class: 'btn-row' },
         G.connected() ? h('button', { class: 'btn btn-sm', disabled: !!G.syncing, onclick: function () { G.sync(rv.start, rv.race_date < TP.today() ? TP.addDays(rv.race_date, 1) : TP.today(), true); } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync this block') : null,
         h('button', { class: 'btn btn-sm', onclick: function () { B.form(rv); } }, TP.icon('pencil'), rv.auto ? 'Customise' : 'Edit'),
-        !rv.auto ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () { TP.confirm('Delete the review “' + rv.name + '”? Your Garmin activities aren’t affected.', 'Delete', function () { deleteReview(rv.id); B.close(); }); } }, 'Delete') : null)));
+        !rv.auto ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () { TP.confirm('Delete the review “' + rv.name + '”? Your Garmin activities aren’t affected.', 'Delete', function () { deleteReview(rv.id); B.close(); }); } }, 'Delete') : null,
+        TP.glossaryButton())));
     if (G.progress) root.appendChild(h('div', { class: 'sync-progress' }, G.progress));
     if (!G.loaded) { root.appendChild(h('p', { class: 'muted' }, 'Loading…')); return; }
     var r = B.result(rv);
@@ -122,6 +123,11 @@
       root.appendChild(h('div', { class: 'empty' }, h('h3', null, r.error ? 'Couldn’t analyse this block' : 'No Garmin activities in this block yet'),
         h('p', null, r.error || 'Sync the block’s dates from Garmin (Sync this block above) to see the review.')));
       return;
+    }
+    if (r.short_history) {
+      var from = TP.addDays(rv.start, -42);
+      root.appendChild(h('div', { class: 'notice' }, h('span', null, 'Your Garmin data on this device starts ' + TP.fmt(r.history_from, '%d %b %Y') + ', so where your fitness started this block can’t be measured yet. Sync from ' + TP.fmt(from, '%d %b %Y') + ' (6 weeks before the block) for the full review.'),
+        G.connected() ? h('button', { class: 'btn btn-sm', disabled: !!G.syncing, onclick: function () { G.sync(from, r.history_from, true); } }, TP.icon('download'), 'Sync the earlier weeks') : null));
     }
     var tabs = ['Summary', 'Weeks', 'Training', 'Recovery', 'Taper & readiness', 'Race'], box = h('div');
     root.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), TP.view.reviewTab || 'Summary', function (v) { TP.view.reviewTab = v; draw(v); }, 'tabs tabs-scroll'));
@@ -161,7 +167,7 @@
     box.appendChild(h('p', { class: 'muted small' }, 'Every week of the block, newest first. Completed weeks are scored; the current week shows progress so far. Click a week for its full analysis.'));
     box.appendChild(CO.weekRows(list, sessions, ctx, function (wk) { return 'Week ' + (Math.round(TP.daysBetween(w0, wk) / 7) + 1); }));
   }
-  function training(box, r) {
+  function training(box, r, rv) {
     var tp = r.taper, nw = Math.max(1, r.train.weekly.length), acts = r.train.acts, d = r.train.dist_all;
     box.appendChild(h('div', { class: 'kpis kpis-5' },
       kpi(sp('%.0f → %.0f', tp.ctl0, tp.ctl_peak), 'Fitness (CTL)', sp('%+.0f%% over the block', tp.gain_pct)),
@@ -176,16 +182,21 @@
     if (r.sport_impact.length) {
       box.appendChild(h('div', { class: 'form-section' }, 'How each sport responded'));
       box.appendChild(h('p', { class: 'muted small' }, 'Did each sport get faster, and did it build the endurance to hold up for longer? Like-for-like sessions early and late in the build: speed from best efforts, endurance from efficiency and heart-rate drift on long sessions.'));
-      box.appendChild(h('div', { class: 'br-grid' }, r.sport_impact.map(sportCard)));
+      box.appendChild(h('div', { class: 'br-grid' }, r.sport_impact.map(function (x) { return sportCard(x, rv); })));
     }
     var top = A.topSessions(r.sessions, 6);
     box.appendChild(h('div', { class: 'form-section' }, 'Session breakdown'));
     box.appendChild(h('p', { class: 'muted small' }, 'Every session scored on the useful stimulus it gave: workload, purpose (intervals, threshold, long endurance), execution against your norm, race specificity and timing.'));
     box.appendChild(h('div', { class: 'coach-2' },
-      h('div', null, h('b', null, '↗ Built the most fitness'), top.best.length ? top.best.map(function (x) { return sessCard(x, true); }) : h('p', { class: 'muted small' }, 'No standout sessions found.')),
-      h('div', null, h('b', null, '⊘ Did little or worked against you'), top.worst.length ? top.worst.map(function (x) { return sessCard(x, false); }) : h('p', { class: 'muted small' }, 'No unhelpful sessions flagged. Every session had a clear purpose.'))));
+      h('div', null, h('b', null, '↗ Built the most fitness'), top.best.length ? top.best.map(function (x) { return sessCard(x, true, rv); }) : h('p', { class: 'muted small' }, 'No standout sessions found.')),
+      h('div', null, h('b', null, '⊘ Did little or worked against you'), top.worst.length ? top.worst.map(function (x) { return sessCard(x, false, rv); }) : h('p', { class: 'muted small' }, 'No unhelpful sessions flagged. Every session had a clear purpose.'))));
   }
-  function sportCard(s) {
+  var FAM_COL = { Improving: '#00a86b', Stable: '#2b4dff', Slipping: '#ff3b30', 'Not comparable': '#999999' };
+  function famChange(f) {
+    if (!fin(f.out_first) || !fin(f.out_last)) return '';
+    return A.fmtOut(f.out_first, f.sport, f.unit) + ' → ' + A.fmtOut(f.out_last, f.sport, f.unit) + (fin(f.hr_first) && fin(f.hr_last) ? sp(' at %.0f → %.0f bpm', f.hr_first, f.hr_last) : '');
+  }
+  function sportCard(s, rv) {
     var vc = { Improved: '#00a86b', Maintained: '#2b4dff', Declined: '#ff3b30' }[s.verdict] || '#999';
     var mk = function (kind) {
       var x = (s.markers || []).filter(function (m) { return m.kind === kind; }); if (!x.length) return null;
@@ -193,16 +204,21 @@
       return h('div', null, h('div', { class: 'mk-h' }, h('span', null, kind), fin(ch) ? h('span', { style: 'color:' + (ch > 1.5 ? '#00a86b' : ch < -1.5 ? '#ff3b30' : '#666') }, sp('%+.1f%%', ch)) : null),
         x.map(function (m) { return h('div', { class: 'mk' }, h('span', null, m.label), h('span', { class: 'nowrap' }, h('b', null, m.early + ' → ' + m.late), h('span', { style: 'font-weight:700;color:' + (m.change > 1.5 ? '#00a86b' : m.change < -1.5 ? '#ff3b30' : '#666') }, sp(' %+.1f%%', m.change)))); }));
     };
-    return h('div', { class: 'br-tile', style: 'cursor:default;border-top-color:' + A.SPORT_COLOURS[s.sport] },
+    var fams = (s.families || []).filter(function (f) { return f.verdict !== 'Not comparable'; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 3);
+    return h('div', { class: 'br-tile', style: 'border-top-color:' + A.SPORT_COLOURS[s.sport], onclick: function () { TP.openPage({ kind: 'sport', reviewId: rv.id, sport: s.sport, title: s.sport + ' · ' + rv.name }); } },
       h('div', { class: 'panel-top' }, h('b', null, s.sport), h('span', { class: 'vword', style: 'color:' + vc }, s.verdict)),
       h('div', { class: 'muted small' }, sp('%d sessions · %.1f h · %.0f km · %.0f%% of training time', s.sessions, s.hours, s.km, s.share)),
       h('div', { class: 'mk' }, h('span', null, s.sport + ' fitness (CTL)'), h('b', null, sp('%.0f → %.0f', s.ctl0, s.ctl_peak))),
       s.markers ? [mk('Endurance'), mk('Speed'), h('div', { class: 'hint' }, s.emphasis + ' Compared: ' + s.compare + '.')] : h('div', { class: 'muted small' }, 'Not enough comparable sessions early and late in the block to measure a change.'),
-      s.best && s.best.length ? h('div', { class: 'small', style: 'margin-top:6px' }, h('div', { class: 'lbl' }, 'Sessions that did most for your ' + s.sport.toLowerCase()), s.best.map(function (x) { return h('div', null, h('b', null, TP.fmt(x.date, '%d %b')), ' · ' + x.type + ' · ' + A.fmtDur(x.moving_s)); })) : null);
+      s.best && s.best.length ? h('div', { class: 'small', style: 'margin-top:6px' }, h('div', { class: 'lbl' }, 'Sessions that did most for your ' + s.sport.toLowerCase()), s.best.map(function (x) { return h('div', null, h('b', null, TP.fmt(x.date, '%d %b')), ' · ' + x.type + ' · ' + A.fmtDur(x.moving_s)); })) : null,
+      fams.length ? h('div', { class: 'small', style: 'margin-top:6px' }, h('div', { class: 'lbl' }, 'Repeated sessions'), fams.map(function (f) {
+        return h('div', { style: 'margin-bottom:3px' }, h('b', null, f.name), ' (' + f.n + '×) ', h('span', { style: 'font-weight:700;color:' + FAM_COL[f.verdict] }, f.verdict), h('div', { class: 'muted' }, famChange(f)));
+      })) : null,
+      h('div', { class: 'link-more', style: 'margin-top:8px' }, 'View ' + s.sport.toLowerCase() + ' details →'));
   }
-  function sessCard(x, good) {
+  function sessCard(x, good, rv) {
     var why = good ? x.why_good : x.why_bad;
-    return h('div', { class: 'sess-card', style: 'border-left-color:' + A.SPORT_COLOURS[x.discipline], onclick: function () { TP.activityView(x.parent_id || x.id); } },
+    return h('div', { class: 'sess-card', style: 'border-left-color:' + A.SPORT_COLOURS[x.discipline], onclick: function () { TP.activityView(x.parent_id || x.id, rv && rv.id); } },
       h('div', { class: 'panel-top' }, h('span', { class: 'small' }, h('b', null, TP.fmt(x.date, '%a %d %b')), ' · ' + x.name), h('span', { class: 'tchip', style: 'color:' + (TYPE_COL[x.type] || '#666') }, x.type)),
       h('div', { class: 'muted small' }, A.fmtDur(x.moving_s) + ' · ' + Math.round(x.tss) + ' TSS' + (x.swim_env ? ' · ' + x.swim_env : '')),
       why ? h('div', { class: 'small' }, why.charAt(0).toUpperCase() + why.slice(1) + '.') : null);
@@ -332,6 +348,88 @@
         y: { fmt: function (v) { return Math.round(v); } }, series: [{ name: 'Heart rate (bpm)', col: '#d6336c', width: 1.4, pts: s.series.map(function (p) { return [p[0], p[2]]; }) }] }));
     });
   }
+
+  // --- One sport within a block review (as the R app's sport page) ---
+  TP.pages.sport = function (root, p) {
+    var rv = B.list().filter(function (x) { return x.id === p.reviewId; })[0], r = rv && B.result(rv);
+    var s = r && !r.empty && r.sport_impact.filter(function (x) { return x.sport === p.sport; })[0];
+    if (!s) { root.appendChild(h('p', { class: 'muted' }, 'This review isn’t available any more.')); return; }
+    var col = A.SPORT_COLOURS[s.sport], vc = { Improved: '#00a86b', Maintained: '#2b4dff', Declined: '#ff3b30' }[s.verdict] || '#999';
+    root.appendChild(h('div', { class: 'act-head', style: '--c:' + col },
+      h('div', null, h('div', { class: 'rp-type', style: 'color:' + col }, 'How your ' + s.sport.toLowerCase() + ' responded · ' + rv.name), h('h2', null, s.sport)),
+      h('div', { class: 'btn-row', style: 'align-items:center' }, h('span', { class: 'vword big-t', style: 'color:' + vc }, s.verdict), TP.glossaryButton())));
+    root.appendChild(h('div', { class: 'kpis kpis-5' }, kpi(s.sessions, 'Sessions'), kpi(s.hours.toFixed(1) + ' h', 'Time'),
+      kpi(s.sport === 'Swim' ? s.km.toFixed(1) + ' km' : Math.round(s.km) + ' km', 'Distance'), kpi(Math.round(s.share) + '%', 'Of all training'),
+      kpi(sp('%.0f → %.0f', s.ctl0, s.ctl_peak), s.sport + ' fitness', 'start → peak')));
+    if (s.markers) {
+      var mk = h('div', { class: 'panel' });
+      ['Endurance', 'Speed'].forEach(function (kind) {
+        var x = s.markers.filter(function (m) { return m.kind === kind; }); if (!x.length) return;
+        var ch = kind === 'Speed' ? s.speed_change : s.endurance_change;
+        mk.appendChild(h('div', { class: 'mk-h' }, h('span', null, kind), fin(ch) ? h('span', { style: 'color:' + (ch > 1.5 ? '#00a86b' : ch < -1.5 ? '#ff3b30' : '#666') }, sp('%+.1f%%', ch)) : null));
+        x.forEach(function (m) { mk.appendChild(h('div', { class: 'mk' }, h('span', null, m.label), h('span', { class: 'nowrap' }, h('b', null, m.early + ' → ' + m.late), h('span', { style: 'font-weight:700;color:' + (m.change > 1.5 ? '#00a86b' : m.change < -1.5 ? '#ff3b30' : '#666') }, sp(' %+.1f%%', m.change))))); });
+      });
+      mk.appendChild(h('div', { class: 'hint' }, s.emphasis + ' Compared: ' + s.compare + '.'));
+      root.appendChild(mk);
+    } else root.appendChild(h('p', { class: 'muted small' }, 'Not enough comparable sessions early and late in the block to measure a change.'));
+    // Weekly volume, and this sport's fitness: two charts, one scale each.
+    var acts = r.train.acts.filter(function (a) { return a.discipline === s.sport; }), metric = 'hours', box = h('div');
+    var ctx = TP.garmin.ctx(), sl = A.loadModel(ctx.scored.filter(function (a) { return a.discipline === s.sport; }), r.start, TP.addDays(r.race_date, -1) < TP.today() ? TP.addDays(r.race_date, -1) : TP.today());
+    function draw() {
+      TP.clear(box);
+      var wk = {}; acts.forEach(function (a) { wk[a.week] = (wk[a.week] || 0) + (metric === 'hours' ? a.hours : a.km); });
+      box.appendChild(TP.chart.xy({ title: 'Weekly ' + s.sport.toLowerCase() + ' ' + (metric === 'hours' ? 'time (hours)' : 'distance (km)'), height: 170, x: { type: 'date' },
+        tipX: function (v) { return 'Week of ' + TP.fmt(TP.weekStart(TP.chart.dstr(v)), '%d %b'); }, y: { fmt: function (v) { return v.toFixed(metric === 'hours' && v < 10 ? 1 : 0); }, zero: true, min: 0 },
+        series: [{ name: metric === 'hours' ? 'Hours' : 'Distance', col: col, kind: 'bar', barW: 5, pts: Object.keys(wk).sort().map(function (k) { return [TP.addDays(k, 3), wk[k]]; }),
+          fmt: function (v) { return metric === 'hours' ? v.toFixed(1) + ' h' : v.toFixed(1) + ' km'; } }] }));
+      box.appendChild(TP.chart.xy({ title: s.sport + ' fitness (CTL from ' + s.sport.toLowerCase() + ' sessions only)', height: 150, x: { type: 'date' }, y: { fmt: function (v) { return Math.round(v); }, zero: true },
+        series: [{ name: s.sport + ' fitness', col: '#2b4dff', pts: sl.map(function (d) { return [d.date, d.ctl]; }), width: 2, fmt: function (v) { return Math.round(v); } }] }));
+    }
+    var pv = h('div', { class: 'panel' }, h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Volume and fitness'),
+      TP.chips([{ value: 'hours', label: 'Hours' }, { value: 'km', label: 'Distance' }], metric, function (v) { metric = v; draw(); }, 'seg')), box);
+    root.appendChild(pv); draw();
+    // Repeated sessions
+    var fams = (s.families || []).filter(function (f) { return f.verdict !== 'Not comparable'; }).sort(function (a, b) { return b.n - a.n; });
+    root.appendChild(h('h3', { class: 'sec-h' }, 'Repeated sessions'));
+    root.appendChild(h('p', { class: 'muted small sec-sub' }, 'Sessions with the same structure grouped together. If the same workout gets faster, or the same pace costs fewer heartbeats, that sport is improving. Click any session to open it.'));
+    if (!fams.length) root.appendChild(h('p', { class: 'muted small' }, 'No repeated sessions found for this sport in the block.'));
+    fams.forEach(function (f) {
+      var base = f.sessions[0].eff;
+      root.appendChild(h('div', { class: 'panel' },
+        h('div', { class: 'panel-top' }, h('span', null, h('b', null, f.name), h('span', { class: 'muted small' }, ' · ' + f.n + ' sessions')), h('span', { class: 'vword', style: 'color:' + FAM_COL[f.verdict] }, f.verdict)),
+        h('div', { class: 'small' }, famChange(f) + (fin(f.eff_change) ? sp(' · efficiency %+.1f%%', f.eff_change) : '')),
+        h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
+          h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Session'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, f.interval ? 'Rep pace / power' : 'Pace / power'), h('th', { class: 'num' }, 'Avg HR'), h('th', { class: 'num' }, 'Efficiency vs first'))),
+          h('tbody', null, f.sessions.map(function (m, k) {
+            var d = fin(m.eff) && fin(base) ? (m.eff / base - 1) * 100 : null;
+            return h('tr', { class: 'click', onclick: function () { TP.activityView(m.parent_id || m.id, rv.id); } }, h('td', { class: 'nowrap' }, TP.fmt(m.date, '%a %d %b')), h('td', null, m.name), h('td', { class: 'num' }, A.fmtDur(m.moving_s)),
+              h('td', { class: 'num' }, h('b', null, A.fmtOut(m.out, f.sport, f.unit))), h('td', { class: 'num' }, fin(m.hr) ? Math.round(m.hr) : '–'),
+              h('td', { class: 'num' }, k === 0 || !fin(d) ? '–' : h('span', { style: 'font-weight:700;color:' + (d > 1 ? '#00a86b' : d < -1 ? '#ff3b30' : '#666') }, sp('%+.1f%%', d))));
+          }))))));
+    });
+    // Every session, sortable.
+    var sb = (r.sessions || []).filter(function (x) { return x.discipline === s.sport; }), sortK = 'date', asc = false, tb = h('tbody');
+    root.appendChild(h('h3', { class: 'sec-h' }, 'Every ' + s.sport.toLowerCase() + ' session'));
+    root.appendChild(h('p', { class: 'muted small sec-sub' }, 'Newest first. Click a column heading to sort by it (click again to reverse); click a session to open it.'));
+    var cols = [['date', 'Date'], ['name', 'Session'], ['type', 'Type'], ['structure', 'Structure'], ['km', 'Distance', 1], ['moving_s', 'Time', 1], ['tss', 'TSS', 1]];
+    var structOf = function (x) { return ((ctx.feats[x.id] || {}).structure || {}).label || '–'; };
+    function fill() {
+      TP.clear(tb);
+      sb.slice().sort(function (a, b) {
+        var va = sortK === 'structure' ? structOf(a) : a[sortK], vb = sortK === 'structure' ? structOf(b) : b[sortK];
+        return (va < vb ? -1 : va > vb ? 1 : 0) * (asc ? 1 : -1);
+      }).forEach(function (x) {
+        tb.appendChild(h('tr', { class: 'click', onclick: function () { TP.activityView(x.parent_id || x.id, rv.id); } }, h('td', { class: 'nowrap' }, TP.fmt(x.date, '%a %d %b')), h('td', null, x.name),
+          h('td', null, h('span', { class: 'tchip', style: 'color:' + (TYPE_COL[x.type] || '#666') }, x.type)), h('td', { class: 'small' }, structOf(x)),
+          h('td', { class: 'num' }, x.km > 0 ? (s.sport === 'Swim' ? Math.round(x.km * 1000) + ' m' : x.km.toFixed(2) + ' km') : '–'), h('td', { class: 'num' }, A.fmtDur(x.moving_s)), h('td', { class: 'num' }, Math.round(x.tss))));
+      });
+    }
+    var head = h('tr', null, cols.map(function (c) {
+      return h('th', { class: (c[2] ? 'num ' : '') + 'sortable', onclick: function () { if (sortK === c[0]) asc = !asc; else { sortK = c[0]; asc = c[0] === 'name' || c[0] === 'type' || c[0] === 'structure'; } fill(); } }, c[1]);
+    }));
+    root.appendChild(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('thead', null, head), tb)));
+    fill();
+  };
 
   // History of finished blocks, for the planning advice.
   B.history = function (excludeCal) {
