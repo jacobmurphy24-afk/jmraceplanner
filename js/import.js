@@ -44,6 +44,7 @@
   }
   // One entry's contents, as a Blob (inflated by the browser's own decompressor).
   function entryBlob(en) {
+    if (en.file) return Promise.resolve(en.file);   // a loose file, or one inside an unzipped folder
     return bytesOf(en.blob, en.off, en.off + 30).then(function (v) {
       var start = en.off + 30 + v.getUint16(26, true) + v.getUint16(28, true), raw = en.blob.slice(start, start + en.csize);
       if (en.method === 0) return raw;
@@ -152,13 +153,9 @@
         });
       }, Promise.resolve());
     }
-    var p = files.reduce(function (p, f) {
-      return p.then(function () {
-        if (/\.fit$/i.test(f.name)) { fits.push({ name: f.name, file: f }); return; }
-        say('Opening ' + f.name + '…');
-        return listZip(f).then(function (list) { return scan(list, 0); }).catch(function (e) { console.warn(f.name, e); TP.toast(f.name + ' isn’t a ZIP or FIT file.', 'warn'); });
-      });
-    }, Promise.resolve());
+    // The ZIP, loose .fit files, or the folder a Mac makes when it unzips the download: all go through
+    // the same scan, with each file's path inside the folder as its name.
+    var p = scan(files.map(function (f) { return { name: f.relPath || f.webkitRelativePath || f.name, file: f }; }), 0);
     // 2. Names and wellness from Garmin's JSON files.
     p = p.then(function () {
       return jsons.reduce(function (p, en) {
@@ -214,17 +211,36 @@
     return job.p;
   };
 
+  // Files dropped on the box, including everything inside dropped folders.
+  function droppedFiles(dt) {
+    var items = Array.prototype.slice.call(dt.items || []).map(function (it) { return it.webkitGetAsEntry ? it.webkitGetAsEntry() : null; });
+    if (!items.length || items.some(function (x) { return !x; })) return Promise.resolve(Array.prototype.slice.call(dt.files));
+    var out = [];
+    function walk(entry) {
+      if (entry.isFile) return new Promise(function (res) { entry.file(function (f) { f.relPath = entry.fullPath.replace(/^\//, ''); out.push(f); res(); }, function () { res(); }); });
+      var reader = entry.createReader();
+      // readEntries returns the folder's contents a batch at a time, until an empty batch.
+      function more() { return new Promise(function (res) { reader.readEntries(res, function () { res([]); }); }).then(function (batch) {
+        return batch.length ? Promise.all(batch.map(walk)).then(more) : null; }); }
+      return more();
+    }
+    return Promise.all(items.map(walk)).then(function () { return out; });
+  }
+
   // --- The upload card ---
   G.importCard = function (opts) {
     opts = opts || {};
     var inp = h('input', { type: 'file', accept: '.zip,.fit,application/zip', multiple: true, style: 'display:none', onchange: function () { G.importFiles(inp.files); inp.value = ''; } });
+    var dir = h('input', { type: 'file', webkitdirectory: '', multiple: true, style: 'display:none', onchange: function () { G.importFiles(dir.files); dir.value = ''; } });
+    var pickDir = h('button', { class: 'btn btn-sm', disabled: !!job, onclick: function () { G.withConsent(function () { dir.click(); }); } }, TP.icon('folder'), 'Choose the unzipped folder');
     var pick = h('button', { class: 'btn btn-primary', disabled: !!job, onclick: function () { G.withConsent(function () { inp.click(); }); } }, TP.icon('upload'), job ? 'Uploading…' : 'Choose your Garmin export');
     var drop = h('div', { class: 'drop-zone', ondragover: function (e) { e.preventDefault(); drop.classList.add('over'); }, ondragleave: function () { drop.classList.remove('over'); },
-      ondrop: function (e) { e.preventDefault(); drop.classList.remove('over'); G.importFiles(e.dataTransfer.files); } },
-      inp, pick, h('div', { class: 'muted small' }, 'or drop the .zip (or .fit files) here'));
+      ondrop: function (e) { e.preventDefault(); drop.classList.remove('over'); droppedFiles(e.dataTransfer).then(G.importFiles); } },
+      inp, dir, pick, h('div', { class: 'muted small' }, 'or drop the .zip, the folder, or .fit files here'),
+      h('div', { class: 'small drop-alt' }, h('span', { class: 'muted' }, 'Did your Mac unzip it? '), pickDir));
     return h('div', { class: 'panel import-card' },
       h('div', { class: 'panel-h' }, opts.title || 'Upload your Garmin history'),
-      h('p', { class: 'small' }, 'Request your data from Garmin (it arrives by email as a ZIP), then upload the ZIP here as it is. Your activities, routes and second-by-second data are read in this browser and kept on this device only. ',
+      h('p', { class: 'small' }, 'Request your data from Garmin (it arrives by email as a ZIP), then upload the ZIP here as it is (or the folder, if your computer unzipped it). Your activities, routes and second-by-second data are read in this browser and kept on this device only. ',
         h('a', { href: 'garmin-guide.html', target: '_blank', rel: 'noopener' }, 'How to download your Garmin data')),
       drop,
       job ? h('div', { class: 'sync-progress', id: 'imp-msg' }, job.msg) : null,
