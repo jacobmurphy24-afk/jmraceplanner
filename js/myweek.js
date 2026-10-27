@@ -150,7 +150,7 @@
     p.appendChild(h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Planned and done'),
       h('div', { class: 'muted small' }, 'Planned ' + planned.length + ' session' + (planned.length === 1 ? '' : 's') + ' · ' + TP.fmtH(plH) + (plKm > 0 ? ' · ' + TP.fmtKm(plKm) : '') + (plUp > 0 ? ' · ↑' + TP.fmtElev(plUp) : '') +
         (hasG ? '  —  Done ' + acts.length + ' · ' + TP.fmtH(doH) + (doKm > 0 ? ' · ' + TP.fmtKm(doKm) : '') + (doUp >= 10 ? ' · ↑' + TP.fmtElev(doUp) : '') + ' · ' + Math.round(doTss) + ' TSS' + (due.length ? ' · ' + doneN + '/' + due.length + ' planned sessions done' : '') : ''))));
-    // A day is picked by tapping it (shared with the calendar's selected date); this week opens on today.
+    // A day is picked by tapping it: it becomes the calendar's selected date, which the + button adds to.
     var we = TP.addDays(ws, 6), sel = TP.view.selected >= ws && TP.view.selected <= we ? TP.view.selected : today >= ws && today <= we ? today : ws;
     var grid = h('div', { class: 'mw-grid' });
     for (var i = 0; i < 7; i++) {
@@ -175,13 +175,6 @@
       grid.appendChild(col);
     }
     p.appendChild(grid);
-    var evIds = []; TP.entriesOn(TP.schedule(), sel).forEach(function (e) { if (e.kind === 'race' && evIds.indexOf(e.bid) < 0) evIds.push(e.bid); });
-    p.appendChild(h('div', { class: 'mw-daybar' },
-      h('div', { class: 'grow' }, h('b', null, TP.fmt(sel, '%A %d %B')),
-        evIds.length ? h('span', { class: 'muted small' }, ' · ' + evIds.map(function (id) { return TP.state.events[id] ? TP.eventName(TP.state.events[id]) : ''; }).join(', ')) : null),
-      h('div', { class: 'btn-row needs-edit' },
-        h('button', { class: 'btn btn-soft btn-sm', onclick: function () { TP.sessionForm(null, { date: sel }); } }, TP.icon('plus'), 'Session'),
-        h('button', { class: 'btn btn-soft btn-sm', onclick: function () { TP.eventForm(null, sel); } }, TP.icon('plus'), 'Event'))));
     p.appendChild(h('div', { class: 'legend small', style: 'margin-top:8px' }, h('span', null, h('i', { style: 'background:#00a86b' }), 'Done'), h('span', null, h('i', { style: 'background:#e0a100' }), 'Partly done'),
       h('span', null, h('i', { style: 'background:#ff3b30' }), 'Missed'), h('span', null, h('i', { style: 'background:#e4e4e4;border:1px solid #8a8a8a' }), 'Activity not in a plan')));
     return p;

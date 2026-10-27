@@ -518,6 +518,8 @@ body.gated .app, body.gated #modal-root { display: none !important; }
   .md-foot .btn { flex: 1 1 auto; }
   .md-foot .grow { display: none; }
   .row-75, .row2, .row3, .sess-top, .ws-grid { grid-template-columns: 1fr; }
+  .sess-when { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .sess-when input[type=date] { -webkit-appearance: none; appearance: none; min-height: 38px; padding: 6px 8px; font-size: 16px; }
   .tiles { grid-template-columns: repeat(3, 1fr); }
   .inp { font-size: 16px; } /* stops iOS zooming into fields */
   .wb-fields .inp { font-size: 16px; }
@@ -606,8 +608,6 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
 .mw-day-h { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 2px; } .mw-day-h span { color: var(--faint); }
 .mw-day { cursor: pointer; } .mw-day:hover { border-color: var(--faint); }
 .mw-day.sel { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); } .mw-day.sel.today { box-shadow: inset 0 3px 0 var(--accent), inset 0 0 0 1px var(--ink); }
-.mw-daybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--rule2); }
-.mw-daybar .btn-row { margin: 0; }
 .mw-rest { text-align: center; margin-top: 10px; }
 .achip.mchip-done { background: #d9f3e8; border-color: #00a86b; } .achip.mchip-partial { background: #fff0cc; border-color: #e0a100; }
 .mw-ready { border-left: 4px solid; padding: 6px 12px; margin: 12px 0 6px; } .mw-ready b { font-size: 1.1rem; }
