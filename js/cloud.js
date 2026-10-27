@@ -290,6 +290,17 @@
   };
 
   // Friendly messages for the errors people actually hit.
+  // This account's own data that isn't part of a plan (Garmin links, block reviews, thresholds):
+  // users/{uid}/garmin/{name}, private to the account and the same on every device it signs in on.
+  C.listenMine = function (name, cb) {
+    if (!C.user) return function () {};
+    return F.onSnapshot(F.doc(db, 'users', C.user.uid, 'garmin', name), function (s) { cb(s.exists() ? s.data() : null); }, function (e) { console.warn('garmin data', name, e); });
+  };
+  C.saveMine = function (name, data) {
+    if (!C.user) return Promise.resolve();
+    return F.setDoc(F.doc(db, 'users', C.user.uid, 'garmin', name), clean(data)).catch(function (e) { TP.toast(C.message(e), 'error'); });
+  };
+
   C.message = function (e) {
     var m = { 'auth/invalid-credential': 'Email or password is wrong.', 'auth/wrong-password': 'Email or password is wrong.', 'auth/user-not-found': 'No account with that email.',
       'auth/email-already-in-use': 'There’s already an account with that email – sign in instead.', 'auth/weak-password': 'Use a password of at least 6 characters.',

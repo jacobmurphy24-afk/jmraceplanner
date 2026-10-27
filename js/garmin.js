@@ -1,23 +1,28 @@
-// Garmin: connect with a Garmin Connect Personal API key, sync activities (summaries + FIT files)
-// into this device's storage, and show them. The key and activities are kept on this device, separately
-// for each account that signs in on it. Requests go through the site's relay (garmin-relay/), because
-// Garmin doesn't accept them straight from a web page.
+// Garmin: connect with a Garmin Connect Personal API key, sync activities (summaries + FIT files), sleep
+// and HRV into this device's storage, and prepare them for the analysis (analysis.js). The key and
+// activities are kept on this device, separately for each account that signs in on it. Requests go
+// through the site's relay (garmin-relay/), because Garmin doesn't accept them straight from a web page.
 (function (TP) {
   var h = TP.h;
   var RELAY = 'https://garmin.jmraceplanner.co.uk';
-  var KEY = 'tp-garmin-key', TOKEN = 'tp-garmin-token', RANGE = 'tp-garmin-range';
-  var G = TP.garmin = { acts: [], loaded: false, syncing: null };
+  var KEY = 'tp-garmin-key', TOKEN = 'tp-garmin-token', RANGE = 'tp-garmin-range', RANGES = 'tp-garmin-ranges', PROFILE = 'tp-garmin-profile';
+  var G = TP.garmin = { acts: [], frecs: {}, wellness: [], loaded: false, syncing: null, prep: null, ver: 0 };
   var uid = null;
   // Storage names include the signed-in account, so two people using one device don't see each other's data.
   function storeKey(name) { return name + (uid ? ':' + uid : ''); }
   function dbName() { return 'tp-garmin' + (uid ? '-' + uid : ''); }
+  function readLS(name, dflt) { try { var v = JSON.parse(localStorage.getItem(storeKey(name)) || 'null'); return v === null ? dflt : v; } catch (e) { return dflt; } }
 
-  // --- Storage on this device (IndexedDB: activity summaries and their second-by-second streams) ---
+  // --- Storage on this device (IndexedDB) ---
+  // acts: activity summaries · streams: second-by-second data · feats: analysis features · wellness: sleep / HRV by date
+  var STORES = ['acts', 'streams', 'feats', 'wellness'];
   var dbp = null;
   function db() {
     if (!dbp) dbp = new Promise(function (res, rej) {
-      var r = indexedDB.open(dbName(), 1);
-      r.onupgradeneeded = function () { r.result.createObjectStore('acts', { keyPath: 'id' }); r.result.createObjectStore('streams', { keyPath: 'id' }); };
+      var r = indexedDB.open(dbName(), 2);
+      r.onupgradeneeded = function () {
+        STORES.forEach(function (s) { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: s === 'wellness' ? 'date' : 'id' }); });
+      };
       r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
     });
     return dbp;
@@ -28,13 +33,13 @@
       t.oncomplete = function () { res(out && out.result !== undefined ? out.result : out); }; t.onerror = function () { rej(t.error); };
     }); });
   }
-  function putActs(list) { return tx('acts', 'readwrite', function (s) { list.forEach(function (a) { s.put(a); }); }); }
-  function putStream(st) { return tx('streams', 'readwrite', function (s) { s.put(st); }); }
+  function putAll(store, list) { return list.length ? tx(store, 'readwrite', function (s) { list.forEach(function (a) { s.put(a); }); }) : Promise.resolve(); }
+  function getAll(store) { return tx(store, 'readonly', function (s) { return s.getAll(); }); }
   G.stream = function (id) { return tx('streams', 'readonly', function (s) { return s.get(id); }); };
-  function hasStream(id) { return tx('streams', 'readonly', function (s) { return s.getKey(id); }).then(function (k) { return k !== undefined; }); }
   // Called when someone signs in or out (or at start-up without accounts).
   G.setUser = function (id) {
-    uid = id || null; dbp = null; G.acts = []; G.loaded = false; G.syncing = null; G.progress = '';
+    uid = id || null; dbp = null; G.acts = []; G.frecs = {}; G.wellness = []; G.loaded = false; G.syncing = null; G.progress = ''; G.prep = null; G.ver++;
+    if (TP.mine) TP.mine.reset();
     if (TP.cloud && TP.cloud.enabled && !uid) { TP.changed(); return; }
     migrate().then(G.load);
   };
@@ -51,17 +56,20 @@
         ['acts', 'streams'].forEach(function (st) { var q = t.objectStore(st).getAll(); q.onsuccess = function () { got[st] = q.result || []; }; });
         t.oncomplete = function () {
           old.close();
-          tx('acts', 'readwrite', function (s) { got.acts.forEach(function (a) { s.put(a); }); })
-            .then(function () { return tx('streams', 'readwrite', function (s) { got.streams.forEach(function (x) { s.put(x); }); }); })
+          putAll('acts', got.acts).then(function () { return putAll('streams', got.streams); })
             .then(function () { indexedDB.deleteDatabase('tp-garmin'); res(); }, function () { res(); });
         };
       };
     });
   }
   G.load = function () {
-    return tx('acts', 'readonly', function (s) { return s.getAll(); }).then(function (all) {
-      G.acts = (all || []).sort(function (a, b) { return a.start < b.start ? 1 : -1; }); G.loaded = true; TP.changed();
-    }).catch(function (e) { console.warn('garmin storage', e); G.loaded = true; });
+    return Promise.all([getAll('acts'), getAll('feats'), getAll('wellness')]).then(function (r) {
+      G.acts = (r[0] || []).sort(function (a, b) { return a.start < b.start ? 1 : -1; });
+      G.frecs = {}; (r[1] || []).forEach(function (f) { G.frecs[f.id] = f; });
+      G.wellness = (r[2] || []).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      G.loaded = true; G.ver++; TP.changed();
+      G.prepare().then(function () { if (TP.match) TP.match.askSoon(); });
+    }).catch(function (e) { console.warn('garmin storage', e); G.loaded = true; TP.changed(); });
   };
 
   // --- Connection ---
@@ -70,7 +78,7 @@
   function jwtExp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return Date.now() + 23 * 3600e3; } }
   // The key is swapped for an access token that lasts up to 24 hours; a new one is fetched when needed.
   function token(force) {
-    var c = null; try { c = JSON.parse(localStorage.getItem(storeKey(TOKEN)) || 'null'); } catch (e) {}
+    var c = readLS(TOKEN, null);
     if (!force && c && c.exp > Date.now() + 60e3) return Promise.resolve(c.token);
     return fetch(RELAY + '/personalapitoken-service/personal-api/personal-api-key/token', { method: 'POST', headers: { Accept: '*/*', Authorization: 'ApiKey ' + G.key() } })
       .then(function (r) {
@@ -106,8 +114,10 @@
   };
   G.disconnect = function () { localStorage.removeItem(storeKey(KEY)); localStorage.removeItem(storeKey(TOKEN)); TP.changed(); };
   G.clearActs = function () {
-    return Promise.all([tx('acts', 'readwrite', function (s) { s.clear(); }), tx('streams', 'readwrite', function (s) { s.clear(); })])
-      .then(function () { G.acts = []; TP.changed(); });
+    return Promise.all(STORES.map(function (st) { return tx(st, 'readwrite', function (s) { s.clear(); }); })).then(function () {
+      G.acts = []; G.frecs = {}; G.wellness = []; G.ver++;
+      localStorage.removeItem(storeKey(RANGES)); TP.changed();
+    });
   };
 
   // --- Activities ---
@@ -117,9 +127,10 @@
     if (k.indexOf('run') >= 0) return 'Run';
     if (/cycl|bik|ride/.test(k)) return 'Bike';
     if (/strength|weight|gym/.test(k)) return 'Gym';
-    if (k.indexOf('hyrox') >= 0) return 'Hyrox';
+    if (/hyrox|hiit|row|ski_erg|indoor_cardio|fitness_equipment/.test(k)) return 'Hyrox';
     return 'Other';
   }
+  G.disciplineFor = disciplineFor;
   function num(x) { var v = parseFloat(x); return isFinite(v) ? v : null; }
   function summary(a) {
     var type = (a.activityType && a.activityType.typeKey) || '', start = String(a.startTimeLocal || a.startTimeGMT || '');
@@ -127,7 +138,7 @@
       duration_s: num(a.duration), moving_s: num(a.movingDuration) || num(a.duration), distance_m: num(a.distance), elev_m: num(a.elevationGain),
       avg_hr: num(a.averageHR), max_hr: num(a.maxHR), avg_power: num(a.avgPower), np: num(a.normPower), calories: num(a.calories),
       aerobic_te: num(a.aerobicTrainingEffect), anaerobic_te: num(a.anaerobicTrainingEffect), load: num(a.activityTrainingLoad), vo2max: num(a.vO2MaxValue),
-      multisport: type.indexOf('multi_sport') >= 0, fit: false };
+      tss: num(a.trainingStressScore), pool_m: num(a.poolLength), multisport: type.indexOf('multi_sport') >= 0, fit: false };
   }
   function search(from, to) {
     var out = [], start = 0, limit = 100;
@@ -185,16 +196,100 @@
     return Object.assign({ id: id, legs: legs.length > 1 ? legs : [], lengths: lengths }, col);
   }
 
-  // Sync: list activities in the range, keep their summaries, then fetch each new FIT file.
+  // Dates covered by a sync: a planned session in them with no activity counts as missed.
+  function addRange(from, to) {
+    var r = readLS(RANGES, null) || initialRanges(); r.push([from, to]);
+    r.sort(function (a, b) { return a[0] < b[0] ? -1 : 1; });
+    var out = [];
+    r.forEach(function (x) { var l = out[out.length - 1]; if (l && x[0] <= TP.addDays(l[1], 1)) { if (x[1] > l[1]) l[1] = x[1]; } else out.push(x.slice()); });
+    localStorage.setItem(storeKey(RANGES), JSON.stringify(out));
+  }
+  function initialRanges() { var s = readLS(RANGE, null); return s && s.from && s.to ? [[s.from, s.to]] : []; }
+  G.covered = function (d) {
+    var r = readLS(RANGES, null) || initialRanges();
+    if (!r.length && G.acts.length) r = [[G.acts[G.acts.length - 1].date, G.acts[0].date]];
+    return r.some(function (x) { return d >= x[0] && d <= x[1]; });
+  };
+
+  // Garmin's own thresholds (lactate threshold HR and pace, FTP) and gender for TRIMP.
+  function fetchProfile() {
+    return api('/userprofile-service/userprofile/settings').then(function (st) {
+      var ud = (st && (st.userData || st)) || {};
+      var p = { lthr: num(ud.lactateThresholdHeartRate), lt_speed: num(ud.lactateThresholdSpeed), ftp: num(ud.functionalThresholdPower || ud.ftp), gender: ud.gender || null, at: TP.today() };
+      localStorage.setItem(storeKey(PROFILE), JSON.stringify(p));
+    }).catch(function (e) { console.warn('Garmin profile', e); });
+  }
+  G.profile = function () { return readLS(PROFILE, {}); };
+
+  // Sleep, overnight HRV and resting HR for each night (stored under the morning you wake up).
+  function dig(o, path) { return path.split('.').reduce(function (v, k) { return v && typeof v === 'object' ? v[k] : undefined; }, o); }
+  function first(o) { for (var i = 1; i < arguments.length; i++) { var v = dig(o, arguments[i]); if (v !== undefined && v !== null) return v; } return null; }
+  function chunks(from, to, n) { var out = []; for (var d = from; d <= to; d = TP.addDays(d, n)) { var e = TP.addDays(d, n - 1); out.push([d, e < to ? e : to]); } return out; }
+  function fetchWellness(from, to) {
+    var w = {}, get = function (d) { return w[d] = w[d] || Object.assign({ date: d }, G.wellness.filter(function (x) { return x.date === d; })[0] || {}); };
+    var seq = function (list, fn) { return list.reduce(function (p, x) { return p.then(function () { return fn(x); }); }, Promise.resolve()); };
+    var sleep = function () { return seq(chunks(from, to, 28), function (c) {
+      G.progress = 'Downloading sleep and HRV from ' + TP.fmt(c[0], '%d %b') + '…'; TP.changed();
+      return api('/sleep-service/sleep/dailySleepSummariesByDate?startDate=' + c[0] + '&endDate=' + c[1]).then(function (data) {
+        var items = Array.isArray(data) ? data : data ? (data.dailySleepSummaries || data.data || data.individualStats || []) : [];
+        items.forEach(function (it) {
+          var dto = it.dailySleepDTO || it, d = first(dto, 'calendarDate') || first(it, 'calendarDate'); if (!d) return;
+          var x = get(String(d).slice(0, 10));
+          var sl = num(first(dto, 'sleepTimeSeconds', 'totalSleepTimeInSeconds', 'values.totalSleepTimeInSeconds'));
+          if (sl) x.sleep_h = sl / 3600;
+          var dp = num(first(dto, 'deepSleepSeconds', 'deepTime')), rm = num(first(dto, 'remSleepSeconds', 'remTime'));
+          if (dp !== null) x.deep_h = dp / 3600;
+          if (rm !== null) x.rem_h = rm / 3600;
+          var sc = num(first(dto, 'sleepScores.overall.value', 'sleepScore', 'overallSleepScore.value')); if (sc !== null) x.sleep_score = sc;
+          var rh = num(first(it, 'restingHeartRate') || first(dto, 'restingHeartRate')); if (rh) x.rhr = rh;
+          var hv = num(first(it, 'avgOvernightHrv') || first(dto, 'avgOvernightHrv')); if (hv) x.hrv = hv;
+        });
+      });
+    }); };
+    var hrv = function () { return seq(chunks(from, to, 28), function (c) {
+      return api('/hrv-service/hrv/daily/' + c[0] + '/' + c[1]).then(function (data) {
+        var rows = (data && (data.hrvSummaries || data)) || [];
+        (Array.isArray(rows) ? rows : []).forEach(function (row) {
+          if (!row || !row.calendarDate) return;
+          var x = get(row.calendarDate), b = row.baseline || {};
+          if (num(b.balancedLow)) x.hrv_low = num(b.balancedLow);
+          if (num(b.balancedUpper)) x.hrv_high = num(b.balancedUpper);
+          if (!x.hrv && num(row.lastNightAvg)) x.hrv = num(row.lastNightAvg);
+          if (num(row.weeklyAvg)) x.hrv7d = num(row.weeklyAvg);
+        });
+      });
+    }); };
+    var rhr = function () { return seq(chunks(from, to, 180), function (c) {
+      return api('/usersummary-service/v2/dailysummaries?startDate=' + c[0] + '&endDate=' + c[1]).then(function (data) {
+        var rows = (data && (data.data || data)) || [];
+        (Array.isArray(rows) ? rows : []).forEach(function (row) {
+          var v = row && num(dig(row, 'heartRate.restingValue') || row.restingHeartRate);
+          if (row && row.calendarDate && v) { var x = get(row.calendarDate); if (!x.rhr) x.rhr = v; }
+        });
+      });
+    }); };
+    var keep = function () {
+      var list = Object.keys(w).map(function (k) { return w[k]; });
+      return putAll('wellness', list).then(function () { return getAll('wellness'); }).then(function (all) { G.wellness = (all || []).sort(function (a, b) { return a.date < b.date ? -1 : 1; }); G.ver++; });
+    };
+    // Each kind is optional: whatever Garmin returns is kept.
+    var soft = function (fn) { return function () { return fn().catch(function (e) { if (/limiting/.test(e.message)) throw e; console.warn('wellness', e); }); }; };
+    return soft(sleep)().then(soft(hrv)).then(soft(rhr)).then(keep, function (e) { return keep().then(function () { throw e; }); });
+  }
+
+  // Sync: list activities in the range, keep their summaries, fetch each new FIT file, then sleep / HRV
+  // and Garmin's thresholds, and prepare the analysis.
   G.sync = function (from, to, withFit) {
     if (G.syncing) return G.syncing;
     G.progress = 'Finding activities…';
+    var today = TP.today(); if (to > today) to = today;
     G.syncing = search(from, to).then(function (list) {
       var acts = list.map(summary), byId = {};
       G.acts.forEach(function (a) { byId[a.id] = a; });
       acts.forEach(function (a) { a.fit = !!(byId[a.id] && byId[a.id].fit); byId[a.id] = a; });
       G.acts = Object.keys(byId).map(function (k) { return byId[k]; }).sort(function (a, b) { return a.start < b.start ? 1 : -1; });
-      return putActs(acts).then(function () {
+      G.ver++;
+      return putAll('acts', acts).then(function () {
         if (!withFit) return { found: acts.length, fit: 0 };
         var todo = acts.filter(function (a) { return !a.fit; }), done = 0, failed = 0;
         return todo.reduce(function (chain, a, i) {
@@ -202,37 +297,94 @@
             G.progress = 'Downloading FIT files ' + (i + 1) + ' of ' + todo.length + '…'; TP.changed();
             return api('/download-service/files/activity/' + a.id, true).then(unzip).then(function (bytes) {
               var st = parseFit(a.id, bytes); a.fit = true;
-              return (st ? putStream(st) : Promise.resolve()).then(function () { done++; return putActs([a]); });
+              return (st ? putAll('streams', [st]) : Promise.resolve()).then(function () { done++; delete G.frecs[a.id]; return putAll('acts', [a]); });
             }).catch(function (e) { failed++; console.warn('FIT', a.id, e); if (/limiting/.test(e.message)) throw e; });
           });
         }, Promise.resolve()).then(function () { return { found: acts.length, fit: done, failed: failed }; });
       });
     }).then(function (r) {
+      addRange(from, to);
+      return fetchProfile().then(function () { return fetchWellness(from, to).catch(function (e) { r.wellnessError = e.message; }); }).then(function () { return r; });
+    }).then(function (r) {
       TP.toast('Synced ' + r.found + ' activities' + (r.fit ? ', ' + r.fit + ' new FIT files' : '') + (r.failed ? ' (' + r.failed + ' couldn’t be read)' : '') + '.');
       return r;
     }).catch(function (e) { TP.toast(e.message, 'error'); })
-      .finally(function () { G.syncing = null; G.progress = ''; TP.changed(); });
+      .finally(function () {
+        G.syncing = null; G.progress = ''; G.ver++; TP.changed();
+        G.prepare().then(function () { if (TP.match) TP.match.askSoon(); });
+      });
     TP.changed();   // now that a sync is under way: progress shows and the button reads "Syncing…"
     return G.syncing;
   };
 
-  // Planned sessions count as done when there's a Garmin activity of the same sport that day.
-  G.doneFor = function (s) {
-    var sp = TP.sportOf(s.discipline);
-    return G.acts.filter(function (a) { return a.date === s.date && (a.sport === sp || (a.multisport && sp !== 'Gym')); })[0] || null;
+  // Work out the analysis features of every activity with a FIT file that doesn't have them yet
+  // (in small steps, so the page stays responsive).
+  var preparing = null;
+  G.prepare = function () {
+    if (preparing) return preparing;
+    var todo = G.acts.filter(function (a) { return a.fit && (!G.frecs[a.id] || G.frecs[a.id].v !== TP.TA.FEATURE_VERSION); });
+    if (!todo.length) return Promise.resolve();
+    G.prep = { done: 0, total: todo.length }; TP.changed();
+    var batch = [];
+    preparing = todo.reduce(function (chain, a) {
+      return chain.then(function () {
+        return G.stream(a.id).then(function (raw) {
+          var rec; try { rec = TP.TA.activityFeatures(a, raw); } catch (e) { console.warn('features', a.id, e); rec = { id: a.id, v: TP.TA.FEATURE_VERSION, f: { moving_s: null }, legs: null }; }
+          G.frecs[a.id] = rec; batch.push(rec); G.prep.done++;
+          var el = document.getElementById('g-prep'); if (el) el.textContent = 'Analysing activities: ' + G.prep.done + ' of ' + G.prep.total + '…';
+          if (batch.length >= 20) { var b = batch; batch = []; return putAll('feats', b); }
+        }).then(function () { return new Promise(function (r) { setTimeout(r, 0); }); });
+      });
+    }, Promise.resolve()).then(function () { return putAll('feats', batch); }).catch(function (e) { console.warn('prepare', e); })
+      .then(function () { preparing = null; G.prep = null; G.ver++; TP.changed(); });
+    return preparing;
+  };
+
+  // Everything the analysis needs, worked out once and reused until activities, sleep data or
+  // thresholds change.
+  var cache = null;
+  G.ctx = function () {
+    var ov = (TP.mine && TP.mine.get('settings').thresholds) || {}, key = G.ver + '|' + JSON.stringify(ov) + '|' + uid;
+    if (cache && cache.key === key) return cache;
+    var A = TP.TA, b = A.buildIndex(G.acts, G.frecs), gp = G.profile();
+    var prof = A.estimateProfile(b.idx, b.feats, gp, G.wellness, ov);
+    cache = { key: key, idx: b.idx, feats: b.feats, transitions: b.transitions, prof: prof, scored: A.score(b.idx, b.feats, prof),
+      wellness: G.wellness, garminProfile: gp, overrides: ov, compliance: function (f, t, bid) { return TP.match.compliance(f, t, bid); } };
+    cache.byId = {}; cache.scored.forEach(function (a) { cache.byId[a.id] = a; });
+    return cache;
+  };
+  // A scored activity (or the legs of a multisport one) by its Garmin id.
+  G.scoredFor = function (id) {
+    var c = G.ctx(); if (c.byId[id]) return [c.byId[id]];
+    return c.scored.filter(function (a) { return a.parent_id === id; });
   };
 
   // --- Page ---
-  var fmtDur = function (s) { return s ? TP.fmtDuration(s) : '–'; };
+  TP.view.gtab = TP.view.gtab || 'Analysis';
   TP.renderGarmin = function (root) {
     root.appendChild(h('div', { class: 'page-head' }, h('h2', null, 'Garmin'),
-      h('p', { class: 'muted' }, 'Connect your Garmin account to bring in your activities, tick off planned sessions, and (next) analyse your training.')));
-    if (!G.connected()) { root.appendChild(connectCard()); if (G.acts.length) root.appendChild(activities()); return; }
-    root.appendChild(syncCard());
+      h('p', { class: 'muted' }, 'Your Garmin activities analysed the way a coach would: training load, fitness and fatigue, intensity, power and pace, and a review of each training block and its race.')));
+    if (!G.connected()) root.appendChild(connectCard()); else root.appendChild(syncCard());
     if (!G.loaded) { root.appendChild(h('p', { class: 'muted' }, 'Loading…')); return; }
-    if (!G.acts.length) { root.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No activities yet'), h('p', null, 'Pick a date range above and press Sync.'))); return; }
-    root.appendChild(overview());
-    root.appendChild(activities());
+    if (!G.acts.length) {
+      if (G.connected()) root.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No activities yet'), h('p', null, 'Pick a date range above and press Sync. Twelve weeks or more gives the analysis enough to work with.')));
+      return;
+    }
+    if (G.prep) root.appendChild(h('div', { class: 'panel prep' }, h('div', { class: 'spinner' }), h('span', { id: 'g-prep' }, 'Analysing activities: ' + G.prep.done + ' of ' + G.prep.total + '…')));
+    var body = h('div');
+    var tabs = ['Analysis', 'Block reviews', 'Activities', 'Thresholds'];
+    root.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), TP.view.gtab, function (v) { TP.view.gtab = v; draw(); }, 'tabs'));
+    root.appendChild(body);
+    function draw() {
+      TP.clear(body);
+      try {
+        if (TP.view.gtab === 'Analysis') TP.coach.render(body);
+        else if (TP.view.gtab === 'Block reviews') TP.blocks.render(body);
+        else if (TP.view.gtab === 'Thresholds') TP.coach.thresholds(body);
+        else body.appendChild(activities());
+      } catch (e) { console.error(e); body.appendChild(h('div', { class: 'panel' }, 'Something went wrong drawing this page: ' + e.message)); }
+    }
+    draw();
   };
 
   function connectCard() {
@@ -260,8 +412,8 @@
   }
 
   function syncCard() {
-    var saved = {}; try { saved = JSON.parse(localStorage.getItem(storeKey(RANGE)) || '{}'); } catch (e) {}
-    var from = TP.input('date', saved.from || TP.addDays(TP.today(), -84)), to = TP.input('date', saved.to || TP.today());
+    var saved = readLS(RANGE, {});
+    var from = TP.input('date', saved.from || TP.addDays(TP.today(), -84)), to = TP.input('date', TP.today());
     var fit = TP.input('checkbox', '', { checked: saved.fit !== false });
     var k = G.key();
     var btn = h('button', { class: 'btn btn-primary', disabled: !!G.syncing, onclick: function () {
@@ -271,63 +423,38 @@
     } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync from Garmin');
     return h('div', { class: 'panel' },
       h('div', { class: 'panel-top' }, h('div', null, h('div', { class: 'panel-h' }, 'Garmin connected'),
-        h('div', { class: 'muted small' }, 'API key …' + k.slice(-4) + ' · saved on this device · ' + G.acts.length + ' activities stored here')),
+        h('div', { class: 'muted small' }, 'API key …' + k.slice(-4) + ' · saved on this device · ' + G.acts.length + ' activities' + (G.wellness.length ? ', ' + G.wellness.length + ' nights of sleep data' : '') + ' stored here')),
         h('a', { href: '#', class: 'small', onclick: function (e) {
           e.preventDefault();
-          TP.confirm('Disconnect Garmin on this device? The API key is removed from this browser. Synced activities are kept unless you also clear them below.', 'Disconnect', function () { G.disconnect(); });
+          TP.confirm('Disconnect Garmin on this device? The API key is removed from this browser. Synced activities are kept unless you also clear them on the Activities tab.', 'Disconnect', function () { G.disconnect(); });
         } }, 'Disconnect')),
       h('div', { class: 'sync-row' }, TP.field('From', from), TP.field('To', to),
-        h('label', { class: 'check' }, fit, 'Also download FIT files (heart rate, power, pace each second)'), btn),
-      G.progress ? h('div', { class: 'sync-progress' }, G.progress) : null);
-  }
-
-  // Weekly hours by sport for the stored activities (last 16 weeks with data).
-  function overview() {
-    var acts = G.acts, last = acts.length ? acts[0].date : TP.today(), w0 = TP.weekStart(TP.addDays(last, -7 * 15)), weeks = [];
-    for (var i = 0; i < 16; i++) weeks.push(TP.addDays(w0, 7 * i));
-    var sports = ['Swim', 'Bike', 'Run', 'Gym', 'Hyrox', 'Other'].filter(function (sp) { return acts.some(function (a) { return a.sport === sp; }); });
-    var col = function (sp) { return TP.SPORT_COLOURS[sp] || '#a0a0a0'; };
-    var data = weeks.map(function (w) { var e = TP.addDays(w, 6); return sports.map(function (sp) { return acts.filter(function (a) { return a.sport === sp && a.date >= w && a.date <= e; }).reduce(function (t, a) { return t + (a.moving_s || 0) / 3600; }, 0); }); });
-    var tots = data.map(function (d) { return d.reduce(function (a, x) { return a + x; }, 0); }), max = Math.max.apply(null, tots.concat([1])) * 1.15;
-    var W = 640, H = 200, L = 30, B = 22, T = 14, bw = (W - L - 6) / weeks.length, y = function (v) { return T + (H - T - B) * (1 - v / max); }, s = '';
-    data.forEach(function (d, i) {
-      var acc = 0, x = L + i * bw + bw * 0.15;
-      d.forEach(function (v, j) { if (v > 0) { s += '<rect x="' + x + '" y="' + y(acc + v) + '" width="' + bw * 0.7 + '" height="' + (y(acc) - y(acc + v)) + '" fill="' + col(sports[j]) + '"/>'; acc += v; } });
-      if (tots[i] > 0) s += '<text x="' + (L + i * bw + bw / 2) + '" y="' + (y(tots[i]) - 3) + '" text-anchor="middle" class="tot">' + tots[i].toFixed(1) + '</text>';
-      if (i % 2 === 0) s += '<text x="' + (L + i * bw + bw / 2) + '" y="' + (H - 5) + '" text-anchor="middle" class="ax">' + TP.fmt(weeks[i], '%d %b') + '</text>';
-    });
-    var recent = acts.filter(function (a) { return a.date >= TP.addDays(TP.today(), -27); });
-    var planned = TP.state.sessions.filter(function (x) { return x.date >= TP.addDays(TP.today(), -27) && x.date <= TP.today(); });
-    var done = planned.filter(function (x) { return G.doneFor(x); }).length;
-    var sumH = recent.reduce(function (t, a) { return t + (a.moving_s || 0); }, 0) / 3600, sumKm = recent.reduce(function (t, a) { return t + (a.distance_m || 0); }, 0) / 1000;
-    var kpi = function (v, l, sub) { return h('div', { class: 'kpi' }, h('div', { class: 'kpi-v' }, v), h('div', { class: 'kpi-l' }, l), sub ? h('div', { class: 'kpi-s' }, sub) : null); };
-    return h('div', null,
-      h('div', { class: 'kpis kpis-4', style: 'margin-bottom:12px' },
-        kpi(recent.length, 'Activities', 'last 4 weeks'), kpi(sumH.toFixed(1) + ' h', 'Training time', 'last 4 weeks'),
-        kpi(TP.round(sumKm, 1) + ' km', 'Distance', 'last 4 weeks'), kpi(planned.length ? done + ' / ' + planned.length : '–', 'Planned sessions done', 'last 4 weeks')),
-      h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Weekly training time'),
-        h('div', { class: 'chart no-units', html: '<div class="chart-leg">' + sports.map(function (sp) { return '<span><i style="background:' + col(sp) + '"></i>' + sp + '</span>'; }).join('') + '</div><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" class="vchart" style="height:200px">' + s + '</svg>' }),
-        h('p', { class: 'hint' }, 'Full analysis – training load, fitness and fatigue, intensity zones, power and pace curves, and block reviews – is the next step for this page.')));
+        h('label', { class: 'check' }, fit, 'Also download FIT files (heart rate, power, pace each second – needed for the full analysis)'), btn),
+      G.progress ? h('div', { class: 'sync-progress' }, G.progress) : null,
+      h('div', { class: 'hint' }, 'Each sync also fetches sleep, overnight HRV and resting heart rate for those dates, and your Garmin thresholds. Activities already on this device aren’t downloaded again.'));
   }
 
   var shown = 40;
   function activities() {
-    var acts = G.acts, rows = acts.slice(0, shown).map(function (a) {
+    var acts = G.acts, M = TP.match, rows = acts.slice(0, shown).map(function (a) {
       var pace = a.sport === 'Run' && a.distance_m > 0 ? TP.fmtDuration(a.moving_s / (a.distance_m / 1000)) + ' /km' : a.sport === 'Swim' && a.distance_m > 0 ? TP.fmtDuration(a.moving_s / (a.distance_m / 100)) + ' /100 m' : a.avg_power ? Math.round(a.np || a.avg_power) + ' W' : '';
-      return h('tr', null, h('td', { class: 'nowrap' }, TP.fmt(a.date, '%a %d %b %Y')),
+      var sc = G.scoredFor(a.id), tss = sc.reduce(function (t, x) { return t + (x.tss || 0); }, 0), sid = M.sessionForAct(a.id), s = sid && TP.state.sessions.filter(function (x) { return x.id === sid; })[0];
+      return h('tr', { class: 'click', onclick: function () { TP.activityView(a.id); } }, h('td', { class: 'nowrap' }, TP.fmt(a.date, '%a %d %b %Y')),
         h('td', null, h('span', { class: 'sdot', style: 'background:' + (TP.SPORT_COLOURS[a.sport] || '#a0a0a0') }), a.name || a.type),
-        h('td', { class: 'num' }, fmtDur(a.moving_s)), h('td', { class: 'num' }, a.distance_m > 0 ? TP.round(a.distance_m / 1000, 2) + ' km' : '–'),
-        h('td', { class: 'num' }, pace || '–'), h('td', { class: 'num' }, a.avg_hr ? Math.round(a.avg_hr) : '–'),
+        h('td', { class: 'num' }, a.moving_s ? TP.fmtDuration(a.moving_s) : '–'), h('td', { class: 'num' }, a.distance_m > 0 ? TP.round(a.distance_m / 1000, 2) + ' km' : '–'),
+        h('td', { class: 'num' }, pace || '–'), h('td', { class: 'num' }, a.avg_hr ? Math.round(a.avg_hr) : '–'), h('td', { class: 'num' }, sc.length ? Math.round(tss) : '–'),
+        h('td', { class: 'small' }, s ? TP.sportLabel(s.discipline) + ' · ' + s.type : h('span', { class: 'muted' }, '–')),
         h('td', { class: 'num' }, a.fit ? '✓' : ''));
     });
     return h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Activities (' + acts.length + ')'),
+      h('div', { class: 'muted small' }, 'Click an activity for its full analysis and to link it to a planned session.'),
       h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
         h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Activity'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, 'Distance'),
-          h('th', { class: 'num' }, 'Pace / power'), h('th', { class: 'num' }, 'Avg HR'), h('th', { class: 'num' }, 'FIT'))),
+          h('th', { class: 'num' }, 'Pace / power'), h('th', { class: 'num' }, 'Avg HR'), h('th', { class: 'num' }, 'TSS'), h('th', null, 'Planned session'), h('th', { class: 'num' }, 'FIT'))),
         h('tbody', null, rows))),
       acts.length > shown ? h('button', { class: 'btn btn-sm', style: 'margin-top:8px', onclick: function () { shown += 60; TP.changed(); } }, 'Show more') : null,
       h('div', { class: 'btn-row', style: 'margin-top:10px' }, h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
-        TP.confirm('Delete the ' + acts.length + ' Garmin activities stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { G.clearActs(); });
+        TP.confirm('Delete the ' + acts.length + ' Garmin activities and sleep data stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { G.clearActs(); });
       } }, 'Clear stored activities')));
   }
 })(window.TP);

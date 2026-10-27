@@ -131,7 +131,7 @@
     var m = TP.modal({ size: 'm',
       title: h('div', null, h('div', { class: 'md-t' }, TP.sportLabel(s.discipline) + ' · ', h('span', { style: 'color:' + col }, s.type)),
         h('div', { class: 'md-sub' }, TP.fmt(s.date, '%A %d %B %Y') + (blockName(s.block_id) ? ' · ' + blockName(s.block_id) : ''))),
-      body: [panel, notes ? [h('div', { class: 'form-section' }, 'Notes'), h('div', { class: 'notes' }, notes)] : null],
+      body: [panel, notes ? [h('div', { class: 'form-section' }, 'Notes'), h('div', { class: 'notes' }, notes)] : null, TP.match.sessionPanel(s, function () { m.close(); })],
       footer: [
         h('button', { class: 'btn btn-outline-danger needs-edit', onclick: function () { TP.confirm('Delete this session?', 'Delete', function () { m.close(); TP.deleteSession(s.id); }); } }, TP.icon('trash'), 'Delete'),
         h('span', { class: 'grow' }),
