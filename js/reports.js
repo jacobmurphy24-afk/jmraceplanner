@@ -236,8 +236,24 @@
     var rb = TP.reportBlock(bid); if (!rb || !TP.garmin || !TP.garmin.acts.length) return null;
     var p = rb.p, key = { Run: p.run_dist, Triathlon: p.tri_dist, Duathlon: p.du_dist, Swim: p.swim_dist, Bike: p.bike_dist, Hyrox: p.hyrox_dist }[p.race_type];
     var goalH = TYPICAL_H[p.race_type] && TYPICAL_H[p.race_type][key];
-    return TP.TA.blockProgress(TP.garmin.ctx(), rb.start, rb.race_date, p.race_type, plannedRows(rb), goalH ? goalH * 3600 : null);
+    var pr = TP.TA.blockProgress(TP.garmin.ctx(), rb.start, rb.race_date, p.race_type, plannedRows(rb), goalH ? goalH * 3600 : null);
+    if (pr && !pr.empty) climbReadiness(rb, pr);
+    return pr;
   };
+  // A hilly course: has the build had sessions that climb close to what the race does?
+  // Good once the biggest climbing ride / run reaches 75% of the course; flagged from week 3 if not.
+  function climbReadiness(rb, pr) {
+    var p = rb.p, today = TP.today(), to = rb.race_date < today ? rb.race_date : today;
+    var acts = TP.garmin.ctx().scored.filter(function (a) { return a.date >= rb.start && a.date <= to; });
+    [['Bike', p.course_bike_elev, 'ride'], ['Run', p.course_run_elev, 'run']].forEach(function (x) {
+      var sport = x[0], course = x[1] > 0 ? x[1] : 0, noun = x[2]; if (course < 150) return;
+      var best = Math.max.apply(null, [0].concat(acts.filter(function (a) { return a.discipline === sport; }).map(function (a) { return a.elev_gain_m > 0 ? a.elev_gain_m : 0; })));
+      var bestPlan = Math.max.apply(null, [0].concat(rb.sess.filter(function (s) { return TP.sportOf(s.discipline) === sport && s.date > to; }).map(TP.climbOf)));
+      var line = 'Course climbs ' + TP.fmtElev(course) + ' on the ' + noun + '; your biggest climbing ' + noun + ' in the build so far is ' + TP.fmtElev(best) + '.';
+      if (best >= 0.75 * course) pr.good.push(line);
+      else if (TP.daysBetween(rb.start, to) >= 14) pr.watch.push(line + (bestPlan >= 0.75 * course ? ' The plan has one coming (' + TP.fmtElev(bestPlan) + ').' : ' Add some hilly ' + noun + 's that build towards it.'));
+    });
+  }
   function progressTab(rb) {
     var A = TP.TA, CO = TP.coach, sp = A.sprintf;
     var pr = TP.reportProgress(rb.id);

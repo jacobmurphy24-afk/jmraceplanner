@@ -61,7 +61,8 @@ window.TP = window.TP || {};
     hyrox_dist: 'Open', hyrox_custom: '', hyrox_train: 10, hyrox_recov: 10,
     bike_dist: '100km', bike_custom: '', bike_train: 8, bike_recov: 7,
     du_dist: 'Standard', du_run1: '', du_bike: '', du_run2: '', du_train: 10, du_recov: 10,
-    train_only_weeks: 4, train_only_recov_check: false, train_only_recov: 3, priority: 3
+    train_only_weeks: 4, train_only_recov_check: false, train_only_recov: 3, priority: 3,
+    course_bike_elev: 0, course_run_elev: 0
   };
 
   // --- Small helpers ---

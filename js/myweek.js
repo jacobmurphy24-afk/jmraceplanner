@@ -126,7 +126,10 @@
     var dist = { '5K': 5000, '10K': 10000, 'Half Marathon': 21097.5, Marathon: 42195 }[e.run_dist];
     if (ctx && e.race_type === 'Run' && dist) {
       var r = A.analyse(ctx.scored, ctx.feats, ctx.prof, TP.addDays(today, -84), today, null);
-      if (!r.empty) { var pr = A.predictRun(dist, r.cs_fit, r.best_efforts); if (fin(pr.time_s)) facts.push(['Predicted time today', A.fmtDur(pr.time_s), pr.method]); }
+      if (!r.empty) {
+        var pr = A.predictRun(dist, r.cs_fit, r.best_efforts), up = e.course_run_elev > 0 ? e.course_run_elev : 0, hilly = (dist / 1000 + TP.climbKm('Run', up)) / (dist / 1000);
+        if (fin(pr.time_s)) facts.push(['Predicted time today', A.fmtDur(pr.time_s * hilly), pr.method + (up ? sp(' · +%.0f%% for %s of climbing', (hilly - 1) * 100, TP.fmtElev(up)) : '')]);
+      }
     }
     if (ctx && TP.reportBlock(id) && TP.reportBlock(id).status !== 'Upcoming') {
       var prog = TP.reportProgress(id);
@@ -142,14 +145,18 @@
     var M = TP.match, today = TP.today(), p = h('div', { class: 'panel' });
     var plH = A.sum(planned.map(TP.estHours)), plKm = A.sum(planned.map(function (s) { return s.total_dist || 0; }));
     var doH = A.sum(acts.map(function (a) { return a.hours; })), doKm = A.sum(acts.map(function (a) { return a.km; })), doTss = A.sum(acts.map(function (a) { return a.tss; }));
+    var plUp = A.sum(planned.map(TP.climbOf)), doUp = A.sum(acts.filter(function (a) { return a.discipline === 'Run' || a.discipline === 'Bike'; }).map(function (a) { return a.elev_gain_m > 0 ? a.elev_gain_m : 0; }));
     var due = planned.filter(function (s) { return s.date < today; }), doneN = hasG ? due.filter(function (s) { return M.linkFor(s.id); }).length : 0;
     p.appendChild(h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Planned and done'),
-      h('div', { class: 'muted small' }, 'Planned ' + planned.length + ' session' + (planned.length === 1 ? '' : 's') + ' · ' + TP.fmtH(plH) + (plKm > 0 ? ' · ' + TP.fmtKm(plKm) : '') +
-        (hasG ? '  —  Done ' + acts.length + ' · ' + TP.fmtH(doH) + (doKm > 0 ? ' · ' + TP.fmtKm(doKm) : '') + ' · ' + Math.round(doTss) + ' TSS' + (due.length ? ' · ' + doneN + '/' + due.length + ' planned sessions done' : '') : ''))));
+      h('div', { class: 'muted small' }, 'Planned ' + planned.length + ' session' + (planned.length === 1 ? '' : 's') + ' · ' + TP.fmtH(plH) + (plKm > 0 ? ' · ' + TP.fmtKm(plKm) : '') + (plUp > 0 ? ' · ↑' + TP.fmtElev(plUp) : '') +
+        (hasG ? '  —  Done ' + acts.length + ' · ' + TP.fmtH(doH) + (doKm > 0 ? ' · ' + TP.fmtKm(doKm) : '') + (doUp >= 10 ? ' · ↑' + TP.fmtElev(doUp) : '') + ' · ' + Math.round(doTss) + ' TSS' + (due.length ? ' · ' + doneN + '/' + due.length + ' planned sessions done' : '') : ''))));
+    // A day is picked by tapping it (shared with the calendar's selected date); this week opens on today.
+    var we = TP.addDays(ws, 6), sel = TP.view.selected >= ws && TP.view.selected <= we ? TP.view.selected : today >= ws && today <= we ? today : ws;
     var grid = h('div', { class: 'mw-grid' });
     for (var i = 0; i < 7; i++) {
       var d = TP.addDays(ws, i), ds = planned.filter(function (s) { return s.date === d; }), da = hasG ? TP.garmin.acts.filter(function (a) { return a.date === d; }) : [];
-      var col = h('div', { class: 'mw-day' + (d === today ? ' today' : '') + (d < today ? ' past' : '') },
+      var col = h('div', { class: 'mw-day' + (d === today ? ' today' : '') + (d < today ? ' past' : '') + (d === sel ? ' sel' : ''), role: 'button', tabindex: '0', 'aria-pressed': String(d === sel),
+        'aria-label': TP.fmt(d, '%A %d %B'), onclick: pick(d), onkeydown: pickKey(d) },
         h('div', { class: 'mw-day-h' }, h('b', null, TP.fmt(d, '%a')), h('span', { class: 'mw-dl' }, TP.fmt(d, '%d %b')), h('span', { class: 'mw-ds' }, TP.fmt(d, '%d'))));
       ds.forEach(function (s) {
         var st = hasG ? M.status(s) : null, k = st ? st.st : '';
@@ -168,10 +175,21 @@
       grid.appendChild(col);
     }
     p.appendChild(grid);
+    var evIds = []; TP.entriesOn(TP.schedule(), sel).forEach(function (e) { if (e.kind === 'race' && evIds.indexOf(e.bid) < 0) evIds.push(e.bid); });
+    p.appendChild(h('div', { class: 'mw-daybar' },
+      h('div', { class: 'grow' }, h('b', null, TP.fmt(sel, '%A %d %B')),
+        evIds.length ? h('span', { class: 'muted small' }, ' · ' + evIds.map(function (id) { return TP.state.events[id] ? TP.eventName(TP.state.events[id]) : ''; }).join(', ')) : null),
+      h('div', { class: 'btn-row needs-edit' },
+        h('button', { class: 'btn btn-soft btn-sm', onclick: function () { TP.sessionForm(null, { date: sel }); } }, TP.icon('plus'), 'Session'),
+        h('button', { class: 'btn btn-soft btn-sm', onclick: function () { TP.eventForm(null, sel); } }, TP.icon('plus'), 'Event'))));
     p.appendChild(h('div', { class: 'legend small', style: 'margin-top:8px' }, h('span', null, h('i', { style: 'background:#00a86b' }), 'Done'), h('span', null, h('i', { style: 'background:#e0a100' }), 'Partly done'),
       h('span', null, h('i', { style: 'background:#ff3b30' }), 'Missed'), h('span', null, h('i', { style: 'background:#e4e4e4;border:1px solid #8a8a8a' }), 'Activity not in a plan')));
     return p;
   }
+
+  // Tapping a day (not one of its sessions or activities, which open themselves) selects it.
+  function pick(d) { return function (e) { if (e.target.closest('.mchip, .achip')) return; TP.view.selected = d; TP.changed(); }; }
+  function pickKey(d) { return function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); TP.view.selected = d; TP.changed(); } }; }
 
   // Fitness (training load) and health (sleep, HRV, resting heart rate), with a readiness read-out.
   function health(ctx, ws, we) {

@@ -36,6 +36,16 @@
         typeBox.appendChild(TP.chips(TP.EVENT_DISTANCES[t].map(function (x) { return { value: x, label: x }; }), p[pre + '_dist'], function (v) { p[pre + '_dist'] = v; drawCustom(); }));
         if (t === 'Duathlon') typeBox.appendChild(h('div', { class: 'hint' }, 'Sprint 5 km run / 20 km bike / 2.5 km run · Standard 10 / 40 / 5 km · Long 10 / 150 / 30 km'));
         typeBox.appendChild(custom); drawCustom();
+        // Course climbing: used to check the build includes enough hills, and to adjust predicted run times.
+        var hasBike = ['Triathlon', 'Duathlon', 'Bike'].indexOf(t) >= 0, hasRun = ['Triathlon', 'Duathlon', 'Run'].indexOf(t) >= 0;
+        if (hasBike || hasRun) {
+          var ftE = TP.imperial() ? 3.28084 : 1, elevIn = function (key) {
+            return TP.input('number', p[key] > 0 ? Math.round(p[key] * ftE) : '', { min: 0, step: 10, inputmode: 'numeric', placeholder: '0', oninput: function () { p[key] = Math.round(TP.num(this.value, 0) / ftE); } });
+          };
+          typeBox.appendChild(h('div', { class: 'form-section' }, 'Course climbing'));
+          typeBox.appendChild(h('div', { class: 'row2' }, hasBike ? TP.field('Bike', elevIn('course_bike_elev'), TP.elevUnit()) : null, hasRun ? TP.field('Run', elevIn('course_run_elev'), TP.elevUnit()) : null));
+          typeBox.appendChild(h('div', { class: 'hint' }, 'Total ascent on the course, if you know it. Leave blank for a flat course.'));
+        }
         typeBox.appendChild(h('div', { class: 'form-section' }, 'Build & recovery'));
         typeBox.appendChild(h('div', { class: 'row2' }, TP.field('Training block', numIn(pre + '_train', 1, 30), 'weeks'), TP.field('Recovery after', numIn(pre + '_recov', 1, 30), 'days')));
       } else {
@@ -131,7 +141,8 @@
     var m = TP.modal({ size: 'm',
       title: h('div', null, h('div', { class: 'md-t' }, TP.sportLabel(s.discipline) + ' · ', h('span', { style: 'color:' + col }, s.type)),
         h('div', { class: 'md-sub' }, TP.fmt(s.date, '%A %d %B %Y') + (blockName(s.block_id) ? ' · ' + blockName(s.block_id) : ''))),
-      body: [panel, notes ? [h('div', { class: 'form-section' }, 'Notes'), h('div', { class: 'notes' }, notes)] : null, TP.match.sessionPanel(s, function () { m.close(); })],
+      body: [panel, TP.climbOf(s) ? h('div', { class: 'climb-line' }, 'Climbing ', h('b', null, TP.fmtElev(s.elev_m)), h('span', { class: 'muted' }, ' · adds about ' + Math.round(TP.climbKm(sport, s.elev_m) * TP.PLAN_PACE_H_KM[sport] * 60) + ' min to a flat ' + sport.toLowerCase())) : null,
+        notes ? [h('div', { class: 'form-section' }, 'Notes'), h('div', { class: 'notes' }, notes)] : null, TP.match.sessionPanel(s, function () { m.close(); })],
       footer: [
         h('button', { class: 'btn btn-outline-danger needs-edit', onclick: function () { TP.confirm('Delete this session?', 'Delete', function () { m.close(); TP.deleteSession(s.id); }); } }, TP.icon('trash'), 'Delete'),
         h('span', { class: 'grow' }),
@@ -187,6 +198,13 @@
     var blockSel = TP.selectEl([{ value: '', label: 'None' }].concat(Object.keys(TP.state.events).map(function (id) {
       var p = TP.state.events[id]; return { value: id, label: TP.eventName(p) + ' (' + p.race_type + ')' };
     })), f.block_id);
+    // Moving the session to another day also moves it to that day's block, unless a block was picked by hand.
+    var sub = h('div', { class: 'md-sub' }, TP.fmt(date, '%A %d %B %Y'));
+    var dateIn = TP.input('date', date, { required: true, onchange: function () {
+      if (!this.value) return;
+      if (blockSel.value === (TP.trainingBlockOn(date) || '')) blockSel.value = TP.trainingBlockOn(this.value) || '';
+      date = this.value; sub.textContent = TP.fmt(date, '%A %d %B %Y');
+    } });
     var typeBox = h('div'), structBox = h('div'), envBox = h('div'), builderTick = h('div'), planSeg = h('div');
     var curType = f.type;
     var durGym = TP.input('number', sport === 'Strength' ? f.duration_min : '', { min: 0, step: 5, inputmode: 'numeric' });
@@ -202,6 +220,15 @@
     var b1s = TP.selectEl(['Bike', 'Run', 'Swim'], brick[0].sport), b2s = TP.selectEl(['Run', 'Bike', 'Swim'], brick[1].sport);
     var b1d = distIn('brick1', brick[0].km), b2d = distIn('brick2', brick[1].km);
     var notes = h('textarea', { class: 'inp', rows: 2, placeholder: 'e.g. 6 × 1 km at 10K pace, 90 s jog recoveries' }); notes.value = f.details || '';
+    // Planned climbing for runs and rides, shown in feet when distances are in miles; stored in metres.
+    var ftF = TP.imperial() ? 3.28084 : 1, climbBox = h('div');
+    var climbIn = TP.input('number', f.elev_m > 0 ? Math.round(f.elev_m * ftF) : '', { min: 0, step: 10, inputmode: 'numeric', placeholder: '0' });
+    function drawClimb() {
+      TP.clear(climbBox);
+      if (sport !== 'Run' && sport !== 'Bike') return;
+      climbBox.appendChild(h('div', { class: 'grid-fields climb-row' }, TP.field('Climbing', climbIn, TP.elevUnit()),
+        h('div', { class: 'hint wide' }, 'Total ascent planned. Hilly sessions take longer, so this adds to the estimated time and training load. Leave blank if flat.')));
+    }
     var wbBox = h('div', { class: 'wb' });
 
     function disc() { return sport === 'Bike' ? env + ' Bike' : sport; }
@@ -297,7 +324,7 @@
       structBox.appendChild(h('div', { class: 'panel' }, setsBox, h('div', { class: 'rule' }), wuBox, h('div', { class: 'rule' }),
         h('div', { class: 'grid-fields' }, TP.field('Total distance', totIn, U), h('div', { class: 'hint wide' }, 'Adds up from the sets and warm-up / cool-down; type a value to override it.'))));
     }
-    function setSport(v) { sport = v; drawEnv(); drawTypes(); drawStruct(); }
+    function setSport(v) { sport = v; drawEnv(); drawTypes(); drawStruct(); drawClimb(); }
 
     // Everything typed so far, as a session-shaped object (for saving and templates).
     function collect() {
@@ -325,21 +352,22 @@
         wu = false; wuD = 0; cdD = 0; n = 1; md = [tot, 0, 0, 0, 0];
       }
       if (!wu) { wuD = 0; cdD = 0; }
+      var climb = TP.num(climbIn.value, 0) / ftF; out.elev_m = (sport === 'Run' || sport === 'Bike') && climb > 0 ? Math.round(climb) : null;
       return Object.assign(out, { wu_cd_check: wu, wu_dist: isFinite(wuD) ? wuD : 0, cd_dist: isFinite(cdD) ? cdD : 0, total_dist: tot, num_sets: n,
         main_dist_1: md[0], main_dist_2: md[1], main_dist_3: md[2], main_dist_4: md[3], main_dist_5: md[4], duration_min: isFinite(dur) ? dur : null });
     }
 
     var m = TP.modal({ size: 'l', cls: 'sess-modal', easyClose: false,
-      title: h('div', null, h('div', { class: 'md-t' }, existing ? 'Edit session' : 'New session'), h('div', { class: 'md-sub' }, TP.fmt(date, '%A %d %B %Y'))),
+      title: h('div', null, h('div', { class: 'md-t' }, existing ? 'Edit session' : 'New session'), sub),
       body: [
         h('div', { class: 'sess-top' },
           h('div', null, h('div', { class: 'form-section' }, 'Sport'),
             TP.chips(TP.SPORTS.map(function (x) { return { value: x, label: x }; }), sport, setSport, 'chips tiles')),
-          h('div', null, h('div', { class: 'form-section' }, 'Training block'), blockSel)),
+          h('div', { class: 'sess-when' }, h('div', null, h('div', { class: 'form-section' }, 'Date'), dateIn), h('div', null, h('div', { class: 'form-section' }, 'Training block'), blockSel))),
         h('div', { class: 'sess-head' }, h('div', { class: 'form-section' }, 'Session type'), envBox),
         typeBox,
         h('div', { class: 'sess-head' }, h('div', { class: 'sess-head-l' }, h('div', { class: 'form-section' }, 'Structure'), builderTick), planSeg),
-        structBox,
+        structBox, climbBox,
         h('div', { class: 'form-section' }, 'Notes'), notes],
       footer: [
         h('button', { class: 'btn btn-sm', onclick: loadTemplate }, TP.icon('folder'), 'Load template'),
@@ -347,9 +375,10 @@
         h('span', { class: 'grow' }),
         h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Cancel'),
         h('button', { class: 'btn btn-primary', onclick: save }, existing ? 'Save changes' : 'Add session')] });
-    drawEnv(); drawTypes(); drawStruct();
+    drawEnv(); drawTypes(); drawStruct(); drawClimb();
 
     function save() {
+      if (!dateIn.value) { TP.toast('Pick a date for the session.', 'warn'); return; }
       var s = Object.assign({ id: existing ? existing.id : TP.uid(), date: date }, collect());
       m.close(); TP.upsertSession(s);
     }

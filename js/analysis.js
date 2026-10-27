@@ -1696,6 +1696,16 @@
       if (dh < -7) { warn.push(sprintf('HRV %.0f%% below your 4-week baseline - signs of accumulated fatigue.', -dh)); score -= 6; }
       else if (dh > 3) good.push(sprintf('HRV %.0f%% above baseline - absorbing the training well.', dh));
     }
+    // Hilly sessions done on the flat miss the point of them: compare planned climbing with what the linked activities climbed.
+    var byId = {}; acts.forEach(function (a) { byId[a.parent_id || a.id] = (byId[a.parent_id || a.id] || 0) + (a.elev_gain_m > 0 ? a.elev_gain_m : 0); });
+    var hilly = (out.planned || []).filter(function (s) { return s.done && TP.climbOf(s) > 0; });
+    out.climb_m = sum(acts.filter(function (a) { return a.discipline === 'Run' || a.discipline === 'Bike'; }).map(function (a) { return a.elev_gain_m > 0 ? a.elev_gain_m : 0; }));
+    out.climb_planned = sum(hilly.map(TP.climbOf)); out.climb_done = sum(hilly.map(function (s) { return byId[links.sessions[s.id]] || 0; }));
+    if (out.climb_planned >= 200) {
+      var cr = out.climb_done / out.climb_planned;
+      if (cr < 0.6) warn.push(sprintf('Hilly sessions came in flatter than planned: %s climbed of %s.', TP.fmtElev(out.climb_done), TP.fmtElev(out.climb_planned)));
+      else if (cr >= 0.85) good.push(sprintf('Hill work done as planned: %s climbed in the hilly sessions.', TP.fmtElev(out.climb_done)));
+    }
     if (out.n === 0 && status === 'complete') { warn.push('No activities recorded this week.'); score = 30; }
     out.good = good; out.warn = warn;
     out.score = status === 'upcoming' ? null : clamp(Math.round(score));

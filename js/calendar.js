@@ -234,7 +234,7 @@
         h('span', { class: 'dot', style: 'background:' + TP.typeCol(s.type) }),
         h('span', { class: 'grow' }, TP.sessionName(s, ' · ')),
         TP.match.STATUS_ICON[k] ? h('span', { class: 'st-tick st-' + k, title: TP.match.STATUS_LABEL[k] }, TP.match.STATUS_ICON[k]) : null,
-        h('span', { class: 'muted' }, TP.planAmount(s))));
+        h('span', { class: 'muted' }, TP.planAmount(s) + (TP.climbOf(s) ? ' · ↑' + TP.fmtElev(s.elev_m) : ''))));
     });
     dayActs.forEach(function (a) {
       var linked = TP.match.sessionObjForAct(a.id), st = linked && TP.match.status(linked), k = st ? st.st : '';

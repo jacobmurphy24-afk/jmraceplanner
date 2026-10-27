@@ -49,6 +49,7 @@
       total_dist: 0, num_sets: 1, main_dist_1: 0, main_dist_2: 0, main_dist_3: 0, main_dist_4: 0, main_dist_5: 0, duration_min: null, plan_by: 'Distance', workout: '', brick: '' }, x);
     ['wu_dist', 'cd_dist', 'total_dist', 'num_sets', 'main_dist_1', 'main_dist_2', 'main_dist_3', 'main_dist_4', 'main_dist_5'].forEach(function (k) { s[k] = TP.num(s[k], 0); });
     s.duration_min = isFinite(parseFloat(s.duration_min)) ? parseFloat(s.duration_min) : null;
+    s.elev_m = parseFloat(s.elev_m) > 0 ? parseFloat(s.elev_m) : null;
     s.id = String(s.id); s.block_id = s.block_id ? String(s.block_id) : '';
     s.wu_cd_check = s.wu_cd_check === true || s.wu_cd_check === 'TRUE';
     if (!s.plan_by) s.plan_by = 'Distance';
@@ -127,13 +128,20 @@
   // --- Sessions ---
   TP.sessionsOn = function (d) { return TP.state.sessions.filter(function (s) { return s.date === d; }); };
   TP.sessionsBetween = function (a, b) { return TP.state.sessions.filter(function (s) { return s.date >= a && s.date <= b; }); };
-  // Estimated hours: duration if set, otherwise from distance at a typical pace (gym 45 min).
+  // Planned climbing (runs and rides only) and what it's worth in flat kilometres: 100 m of climbing
+  // costs about 1 km of running (the ITRA "effort km"), and about 1.25 km of riding.
+  TP.CLIMB_KM_PER_M = { Run: 1 / 100, Bike: 1 / 80 };
+  TP.climbOf = function (s) { return TP.CLIMB_KM_PER_M[TP.sportOf(s.discipline)] && s.elev_m > 0 ? s.elev_m : 0; };
+  TP.climbKm = function (sport, elev) { return (TP.CLIMB_KM_PER_M[sport] || 0) * (elev > 0 ? elev : 0); };
+  TP.elevUnit = function () { return TP.imperial() ? 'ft' : 'm'; };
+  TP.fmtElev = function (m) { return m > 0 ? Math.round(TP.imperial() ? m * 3.28084 : m).toLocaleString('en-GB') + ' ' + TP.elevUnit() : '–'; };
+  // Estimated hours: duration if set, otherwise from distance (plus climbing) at a typical pace (gym 45 min).
   TP.estHours = function (s) {
     var sp = TP.sportOf(s.discipline);
     if (s.duration_min > 0) return s.duration_min / 60;
     if (sp === 'Strength') return 0.75;
     var pace = TP.PLAN_PACE_H_KM[sp]; if (pace === undefined) pace = 0.1;
-    return (s.total_dist || 0) * pace;
+    return ((s.total_dist || 0) + TP.climbKm(sp, TP.climbOf(s))) * pace;
   };
   TP.brickLegs = function (json) { try { var b = JSON.parse(json || ''); return Array.isArray(b) && b.length === 2 ? b : null; } catch (e) { return null; } };
   TP.brickText = function (json) {

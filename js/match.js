@@ -246,6 +246,8 @@
           h('span', { class: 'grow' }, h('b', null, a.name || a.type), h('div', { class: 'muted small' }, TP.fmt(a.date, '%a %d %b') + ' · ' + actAmount(a) + (a.avg_hr ? ' · avg HR ' + Math.round(a.avg_hr) : '') + (sc.length ? ' · ' + Math.round(tss) + ' TSS' : ''))),
           h('span', { class: 'link-more' }, 'View →')),
         st && st.ratio ? h('div', { class: 'hint' }, 'Done: ' + Math.round(st.ratio * 100) + '% of the planned ' + (plannedAmount(s) && plannedAmount(s).km ? 'distance' : 'time') + '. Under 80% counts as partly completed.') : null,
+        TP.climbOf(s) || a.elev_m > 0 ? h('div', { class: 'hint' }, 'Climbing: ' + (TP.climbOf(s) ? TP.fmtElev(s.elev_m) + ' planned · ' : '') + TP.fmtElev(a.elev_m) + ' done' +
+          (TP.climbOf(s) && a.elev_m > 0 ? ' (' + Math.round(a.elev_m / s.elev_m * 100) + '%)' : '') + '.') : null,
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn btn-sm', onclick: function () { M.pickActivity(s.id); } }, 'Change activity'),
           h('button', { class: 'btn btn-sm', onclick: function () { M.unlink(s.id); TP.toast('Unlinked.'); if (closeParent) closeParent(); } }, 'Unlink')),
