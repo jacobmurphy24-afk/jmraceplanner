@@ -149,7 +149,8 @@
       h('div', null, h('div', { class: 'br-rings big' }, C.ring(r.training_score, 'Training effectiveness', 96, verdict(r.training_score) + ' build'), C.ring(r.race_score, 'Race execution', 96, fin(r.race_score) ? verdict(r.race_score) + ' race' : 'Race to come')),
         h('div', { class: 'br-head' }, head)),
       h('div', null, h('div', { class: 'form-section' }, 'Training effectiveness'), Object.keys(r.components).map(function (k) {
-        var f = r.fitness, note = k === 'fitness' ? sp('Fitness over the block %.0f → %.0f at its peak, %+.0f%%', f.start, f.peak, f.gain) : null;
+        var f = r.fitness, note = k === 'fitness' ? sp('Fitness (CTL) %.0f → %.0f at its peak, %+.0f%%', f.start, f.peak, f.gain) +
+          (r.history_from && r.history_from > TP.addDays(r.start, -120) ? '. Your Garmin history starts ' + TP.fmt(r.history_from, '%d %b %Y') + ': upload earlier activities for a more accurate start.' : '') : null;
         return bar(k, r.components[k], note);
       })),
       h('div', null, h('div', { class: 'form-section' }, 'Race execution'), r.race_components ? Object.keys(r.race_components).map(function (k) { return bar(k, r.race_components[k]); }) : h('p', { class: 'muted small' }, 'Available once the race activity is synced.'))));
@@ -172,7 +173,7 @@
     p.appendChild(CO.weeklyChart(acts.map(function (a) { return { week: a.week, discipline: a.discipline, tss: a.tss, hours: a.hours }; }), 'tss', { height: 240, fitness: r.load.filter(function (d) { return d.date < r.race_date; }) }));
     box.appendChild(p);
     box.appendChild(h('div', { class: 'kpis kpis-5' },
-      kpi(sp('%.0f → %.0f', r.fitness.start, r.fitness.peak), 'Fitness over the block', sp('%+.0f%%, start to peak', r.fitness.gain)),
+      kpi(sp('%.0f → %.0f', r.fitness.start, r.fitness.peak), 'Fitness (CTL)', sp('%+.0f%% over the block', r.fitness.gain)),
       kpi(sp('%.1f h', A.sum(acts.map(function (a) { return a.hours; })) / nw), 'Hours a week', sp('%.0f TSS a week', A.sum(acts.map(function (a) { return a.tss; })) / nw)),
       kpi(sp('%.1f', acts.length / nw), 'Sessions a week'),
       kpi(d.type.replace(' / low-intensity focus', ''), 'Intensity mix', fin(d.p1) ? sp('%.0f / %.0f / %.0f %%', d.p1, d.p2, d.p3) : null),

@@ -1270,9 +1270,12 @@
     var ctlRace = pre.length ? pre[pre.length - 1].ctl : ctl0, tsbRace = load[load.length - 1].tsb;
     var comp = {};
     // Fitness gain from the block alone (start to end), so it doesn't depend on what was synced before it.
-    var fit = A.blockFitness(scored, start, race);
-    out.fitness = fit;
-    comp.fitness = clamp(40 + 2.4 * fit.gain);
+    // Fitness gain as in the R app: fitness (CTL, from all your history) at the start of the block against its
+    // peak before the race. The more history there is before the block, the closer this is to the R app's figure.
+    var gain = ctl0 > 5 ? (ctlPeak / ctl0 - 1) * 100 : ctlPeak > 20 ? 40 : 0;
+    out.fitness = { start: ctl0, peak: ctlPeak, peak_date: peakRow.date, gain: gain };
+    out.history_from = ctx.historyStart || null;
+    comp.fitness = clamp(40 + 2.4 * gain);
     var wk = train.weekly, weeksOk = wk.length ? wk.filter(function (w) { return w.sessions >= 3; }).length / wk.length : 0;
     var ud = Object.keys(by(acts, 'date')).sort(), longGaps = 0;
     for (i = 1; i < ud.length; i++) if (days(ud[i - 1], ud[i]) > 7) longGaps++;
