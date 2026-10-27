@@ -124,7 +124,7 @@
         h('p', null, r.error || 'Sync the block’s dates from Garmin (Sync this block above) to see the review.')));
       return;
     }
-    var tabs = ['Summary', 'Weeks', 'Training', 'Recovery', 'Taper & readiness', 'Race'], box = h('div');
+    var tabs = ['Summary', 'Training', 'Recovery', 'Taper & readiness', 'Weeks', 'Race'], box = h('div');
     root.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), TP.view.reviewTab || 'Summary', function (v) { TP.view.reviewTab = v; draw(v); }, 'tabs tabs-scroll'));
     root.appendChild(box);
     function draw(t) {
@@ -168,9 +168,8 @@
   }
   function training(box, r, rv) {
     var tp = r.taper, nw = Math.max(1, r.train.weekly.length), acts = r.train.acts, d = r.train.dist_all;
-    var p = CO.panel('Weekly training load and fitness');
-    p.appendChild(CO.weeklyChart(acts.map(function (a) { return { week: a.week, discipline: a.discipline, tss: a.tss, hours: a.hours }; }), 'tss'));
-    p.appendChild(CO.pmcChart(r.load, { height: 170 }));
+    var p = CO.panel('Weekly training load and fitness', 'Bars: training stress each week, by sport. Line: fitness (CTL) at the end of each week, on the right-hand scale.');
+    p.appendChild(CO.weeklyChart(acts.map(function (a) { return { week: a.week, discipline: a.discipline, tss: a.tss, hours: a.hours }; }), 'tss', { height: 240, fitness: r.load.filter(function (d) { return d.date < r.race_date; }) }));
     box.appendChild(p);
     box.appendChild(h('div', { class: 'kpis kpis-5' },
       kpi(sp('%.0f → %.0f', r.fitness.start, r.fitness.peak), 'Fitness over the block', sp('%+.0f%%, start to peak', r.fitness.gain)),
@@ -286,19 +285,6 @@
       h('div', null, h('div', { class: 'lbl' }, 'Finish time'), h('div', { class: 'big' }, A.fmtDur(rs.time_s)), rs.transition_s > 0 ? h('div', { class: 'muted small' }, 'including ' + A.fmtDur(rs.transition_s) + ' in transitions') : null),
       h('div', { class: 'right' }, fin(rs.display_ratio) || fin(rs.perf_ratio) ? h('div', { class: 'strong' }, 'Overall: ' + pct(fin(rs.display_ratio) ? rs.display_ratio : rs.perf_ratio) + (fin(rs.predicted_s) ? ' (predicted ' + A.fmtDur(rs.predicted_s) + ')' : '')) : null,
         fin(rs.goal_delta) ? h('div', { class: 'strong', style: 'color:' + (rs.goal_delta <= 0 ? '#00a86b' : '#d99a00') }, 'Goal ' + A.fmtDur(rs.goal_s) + ': ' + A.fmtDur(Math.abs(rs.goal_delta)) + (rs.goal_delta <= 0 ? ' under' : ' over')) : null)));
-    box.appendChild(h('div', { class: 'form-section' }, 'Pacing through each leg'));
-    box.appendChild(h('p', { class: 'muted small' }, 'Your pace or power through the race (smoothed). Flat or rising is good; a line falling away to the right is a fade. Heart rate is shown underneath.'));
-    r.legs.forEach(function (l) {
-      var s = l.stream, a = l.act; if (!s || !s.series || !s.series.length) return;
-      var isW = s.unit === 'W', disc = a.discipline, conv = function (v) { return isW ? v : disc === 'Run' ? (v > 1 ? 1000 / v : null) : disc === 'Swim' ? (v > 0.3 ? 100 / v : null) : v * 3.6; };
-      var paceAxis = !isW && (disc === 'Run' || disc === 'Swim');
-      box.appendChild(C.xy({ title: disc + (isW ? ' power (W)' : paceAxis ? ' pace' + (disc === 'Run' ? ' (/km)' : ' (/100 m)') + ', faster is higher' : ' speed (km/h)'), height: 150, x: { type: 'num', fmt: function (v) { return Math.round(v) + "'"; } },
-        tipX: function (v) { return TP.fmtDuration(Math.round(v * 60)) + ' in'; },
-        y: paceAxis ? { fmt: A.fmtPace, invert: true } : { fmt: function (v) { return Math.round(v); } },
-        series: [{ name: isW ? 'Power' : paceAxis ? 'Pace' : 'Speed', col: A.SPORT_COLOURS[disc], width: 1.8, pts: s.series.map(function (p) { return [p[0], conv(p[1])]; }), fmt: paceAxis ? A.fmtPace : function (v) { return isW ? Math.round(v) + ' W' : v.toFixed(1) + ' km/h'; } }] }));
-      if (s.series.some(function (p) { return fin(p[2]); })) box.appendChild(C.xy({ height: 100, x: { type: 'num', fmt: function (v) { return Math.round(v) + "'"; } }, tipX: function (v) { return TP.fmtDuration(Math.round(v * 60)) + ' in'; },
-        y: { fmt: function (v) { return Math.round(v); } }, series: [{ name: 'Heart rate (bpm)', col: '#d6336c', width: 1.4, pts: s.series.map(function (p) { return [p[0], p[2]]; }) }] }));
-    });
     var cards = h('div', { class: 'legs' }), tr = r.transitions || [];
     r.legs.forEach(function (l, k) {
       var a = l.act, e = l.exp, s = l.stream, t = fin(a.race_s) ? a.race_s : a.moving_s, col = A.SPORT_COLOURS[a.discipline] || '#585858';
@@ -315,6 +301,20 @@
       if (tr[k] && k < r.legs.length - 1) cards.appendChild(h('div', { class: 'tleg' }, '→', h('b', null, tr[k].label), A.fmtDur(tr[k].seconds)));
     });
     box.appendChild(cards);
+    box.appendChild(h('div', { class: 'form-section' }, 'Pacing through each leg'));
+    box.appendChild(h('p', { class: 'muted small' }, 'Your pace or power through the race (smoothed), with heart rate (pink, right-hand scale). Flat or rising pace is good; a line falling away to the right is a fade.'));
+    r.legs.forEach(function (l) {
+      var s = l.stream, a = l.act; if (!s || !s.series || !s.series.length) return;
+      var isW = s.unit === 'W', disc = a.discipline, conv = function (v) { return isW ? v : disc === 'Run' ? (v > 1 ? 1000 / v : null) : disc === 'Swim' ? (v > 0.3 ? 100 / v : null) : v * 3.6; };
+      var paceAxis = !isW && (disc === 'Run' || disc === 'Swim'), unit = isW ? 'W' : paceAxis ? (disc === 'Run' ? '/km' : '/100 m') : 'km/h';
+      var series = [{ name: isW ? 'Power' : paceAxis ? 'Pace' : 'Speed', col: A.SPORT_COLOURS[disc], width: 1.8, pts: s.series.map(function (p) { return [p[0], conv(p[1])]; }),
+        fmt: paceAxis ? function (v) { return A.fmtPace(v) + ' ' + unit; } : function (v) { return isW ? Math.round(v) + ' W' : v.toFixed(1) + ' km/h'; } }];
+      if (s.series.some(function (p) { return fin(p[2]); })) series.push({ name: 'Heart rate', col: '#d6336c', width: 1.4, axis: 'right', pts: s.series.map(function (p) { return [p[0], p[2]]; }), fmt: function (v) { return Math.round(v) + ' bpm'; } });
+      box.appendChild(C.xy({ title: disc + (paceAxis ? ' pace and heart rate (faster is higher)' : isW ? ' power and heart rate' : ' speed and heart rate'), height: 190,
+        x: { type: 'num', fmt: function (v) { return Math.round(v) + "'"; } }, tipX: function (v) { return TP.fmtDuration(Math.round(v * 60)) + ' in'; },
+        y: paceAxis ? { fmt: A.fmtPace, invert: true, label: unit } : { fmt: function (v) { return Math.round(v); }, label: unit },
+        y2: { fmt: function (v) { return Math.round(v); }, label: 'bpm' }, series: series }));
+    });
     // Plain-language read-out per leg.
     var notes = [];
     r.legs.forEach(function (l) {
@@ -363,21 +363,19 @@
       h('div', null, h('div', { class: 'rp-type', style: 'color:' + col }, 'How your ' + s.sport.toLowerCase() + ' responded · ' + rv.name), h('h2', null, s.sport)),
       h('div', { class: 'btn-row', style: 'align-items:center' }, h('span', { class: 'vword big-t', style: 'color:' + vc }, s.verdict), TP.glossaryButton())));
     // Weekly volume, and this sport's fitness: two charts, one scale each.
-    var acts = r.train.acts.filter(function (a) { return a.discipline === s.sport; }), metric = 'hours', box = h('div');
+    var acts = r.train.acts.filter(function (a) { return a.discipline === s.sport; }), box = h('div');
     var ctx = TP.garmin.ctx(), sl = A.loadModel(ctx.scored.filter(function (a) { return a.discipline === s.sport; }), r.start, TP.addDays(r.race_date, -1) < TP.today() ? TP.addDays(r.race_date, -1) : TP.today());
-    function draw() {
-      TP.clear(box);
-      var wk = {}; acts.forEach(function (a) { wk[a.week] = (wk[a.week] || 0) + (metric === 'hours' ? a.hours : a.km); });
-      box.appendChild(TP.chart.xy({ title: 'Weekly ' + s.sport.toLowerCase() + ' ' + (metric === 'hours' ? 'time (hours)' : 'distance (km)'), height: 170, x: { type: 'date' },
-        tipX: function (v) { return 'Week of ' + TP.fmt(TP.weekStart(TP.chart.dstr(v)), '%d %b'); }, y: { fmt: function (v) { return v.toFixed(metric === 'hours' && v < 10 ? 1 : 0); }, zero: true, min: 0 },
-        series: [{ name: metric === 'hours' ? 'Hours' : 'Distance', col: col, kind: 'bar', barW: 5, pts: Object.keys(wk).sort().map(function (k) { return [TP.addDays(k, 3), wk[k]]; }),
-          fmt: function (v) { return metric === 'hours' ? v.toFixed(1) + ' h' : v.toFixed(1) + ' km'; } }] }));
-      box.appendChild(TP.chart.xy({ title: s.sport + ' fitness (CTL from ' + s.sport.toLowerCase() + ' sessions only)', height: 150, x: { type: 'date' }, y: { fmt: function (v) { return Math.round(v); }, zero: true },
-        series: [{ name: s.sport + ' fitness', col: '#2b4dff', pts: sl.map(function (d) { return [d.date, d.ctl]; }), width: 2, fmt: function (v) { return Math.round(v); } }] }));
-    }
-    var pv = h('div', { class: 'panel' }, h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Volume and fitness'),
-      TP.chips([{ value: 'hours', label: 'Hours' }, { value: 'km', label: 'Distance' }], metric, function (v) { metric = v; draw(); }, 'seg')), box);
-    root.appendChild(pv); draw();
+    // One chart: weekly time in this sport (bars) with this sport's fitness on top (line, right-hand scale).
+    var wk = {}; acts.forEach(function (a) { wk[a.week] = (wk[a.week] || 0) + a.hours; });
+    var byWeek = {}; sl.forEach(function (d) { byWeek[TP.weekStart(d.date)] = d.ctl; });
+    var fitPts = Object.keys(byWeek).sort().map(function (k) { return [TP.addDays(k, 3), byWeek[k]]; });
+    box.appendChild(TP.chart.xy({ height: 240, x: { type: 'date' }, tipX: function (v) { return 'Week of ' + TP.fmt(TP.weekStart(TP.chart.dstr(v)), '%d %b'); },
+      y: { fmt: function (v) { return v.toFixed(v < 10 ? 1 : 0); }, zero: true, min: 0, label: 'hours a week' }, y2: { fmt: function (v) { return Math.round(v); }, zero: true, min: 0, label: s.sport.toLowerCase() + ' fitness' },
+      series: [{ name: 'Weekly ' + s.sport.toLowerCase() + ' time', col: col, kind: 'bar', barW: 5, alpha: 0.75, pts: Object.keys(wk).sort().map(function (k) { return [TP.addDays(k, 3), wk[k]]; }), fmt: function (v) { return v.toFixed(1) + ' h'; } },
+        { name: s.sport + ' fitness (CTL)', col: '#2b4dff', width: 2.2, axis: 'right', pts: fitPts, fmt: function (v) { return Math.round(v); } },
+        { name: '', col: '#2b4dff', kind: 'dots', r: 3, axis: 'right', noLegend: true, hideTip: true, pts: fitPts }] }));
+    root.appendChild(h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Volume and fitness'),
+      h('div', { class: 'muted small' }, 'Bars: hours of ' + s.sport.toLowerCase() + ' each week. Line: ' + s.sport.toLowerCase() + ' fitness (CTL from ' + s.sport.toLowerCase() + ' sessions only), on the right-hand scale.'), box));
     root.appendChild(h('div', { class: 'kpis kpis-5' }, kpi(s.sessions, 'Sessions'), kpi(s.hours.toFixed(1) + ' h', 'Time'),
       kpi(s.sport === 'Swim' ? s.km.toFixed(1) + ' km' : Math.round(s.km) + ' km', 'Distance'), kpi(Math.round(s.share) + '%', 'Of all training'),
       kpi(sp('%.0f → %.0f', s.ctl0, s.ctl_peak), s.sport + ' fitness', 'start → peak')));

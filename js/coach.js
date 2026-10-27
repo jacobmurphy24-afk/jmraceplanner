@@ -106,7 +106,14 @@
           pts: Object.keys(wk).sort().map(function (k) { return [TP.addDays(k, 3), wk[k]]; }), fmt: function (v) { return metric === 'hours' ? v.toFixed(1) + ' h' : Math.round(v) + ' TSS'; } });
       });
     });
-    return C.xy({ height: opts.height || 200, x: { type: 'date' }, y: { fmt: function (v) { return metric === 'hours' ? v.toFixed(v < 10 ? 1 : 0) : Math.round(v); }, zero: true, min: 0 }, series: series,
+    // opts.fitness: daily load rows; fitness (CTL) at the end of each week is drawn as a line on the right-hand scale.
+    if (opts.fitness && opts.fitness.length) {
+      var byWeek = {}; opts.fitness.forEach(function (d) { byWeek[TP.weekStart(d.date)] = d.ctl; });
+      series.push({ name: opts.fitnessName || 'Fitness (CTL)', col: '#2b4dff', width: 2.2, axis: 'right', pts: Object.keys(byWeek).sort().map(function (k) { return [TP.addDays(k, 3), byWeek[k]]; }), fmt: function (v) { return Math.round(v) + ' fitness'; } });
+      series.push({ name: '', col: '#2b4dff', kind: 'dots', r: 3, axis: 'right', noLegend: true, hideTip: true, pts: Object.keys(byWeek).sort().map(function (k) { return [TP.addDays(k, 3), byWeek[k]]; }) });
+    }
+    return C.xy({ height: opts.height || 200, x: { type: 'date' }, y: { fmt: function (v) { return metric === 'hours' ? v.toFixed(v < 10 ? 1 : 0) : Math.round(v); }, zero: true, min: 0, label: opts.fitness ? (metric === 'hours' ? 'hours a week' : 'TSS a week') : null }, series: series,
+      y2: { fmt: function (v) { return Math.round(v); }, zero: true, min: 0, label: 'fitness' },
       tipX: function (v) { var d = C.dstr(v); return 'Week of ' + TP.fmt(TP.weekStart(d), '%d %b'); }, vlines: opts.vlines });
   };
   function weeklyLoad(r) {

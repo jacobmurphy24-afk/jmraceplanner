@@ -278,17 +278,18 @@
     var power = st.power.filter(function (v) { return v > 0; }).length > 120 ? smooth(st.power, 15) : null;
     var speed = st.speed.filter(fin).length > 120 ? smooth(st.speed, 30) : null;
     var alt = st.altitude.filter(fin).length > 120 ? smooth(st.altitude, 15) : null;
-    if (power && disc === 'Bike') root.appendChild(TP.chart.xy({ title: 'Power (15-second average)', height: 170, x: xAxis, tipX: tipX, bands: bands, y: { fmt: function (v) { return Math.round(v); }, zero: true },
-      series: [{ name: 'Power (W)', col: '#00a86b', pts: pts(power), width: 1.5 }] }));
-    else if (speed) {
-      if (disc === 'Run' || disc === 'Swim') {
-        var per = disc === 'Run' ? 1000 : 100, pace = speed.map(function (v) { return v > (disc === 'Run' ? 1.2 : 0.3) ? per / v : null; });
-        root.appendChild(TP.chart.xy({ title: 'Pace' + (disc === 'Run' ? ' (/km)' : ' (/100 m)') + ', faster is higher', height: 170, x: xAxis, tipX: tipX, bands: bands, y: { fmt: A.fmtPace, invert: true },
-          series: [{ name: 'Pace', col: TP.SPORT_COLOURS[disc], pts: pts(pace), width: 1.5, fmt: A.fmtPace }] }));
-      } else root.appendChild(TP.chart.xy({ title: 'Speed (km/h)', height: 170, x: xAxis, tipX: tipX, bands: bands, y: { fmt: function (v) { return v.toFixed(0); }, zero: true },
-        series: [{ name: 'Speed (km/h)', col: '#1f7aff', pts: pts(speed.map(function (v) { return fin(v) ? v * 3.6 : null; })), width: 1.5 }] }));
-    }
-    if (hr) root.appendChild(TP.chart.xy({ title: 'Heart rate (bpm)', height: 140, x: xAxis, tipX: tipX, bands: bands, y: { fmt: function (v) { return Math.round(v); } },
+    // Pace / speed / power with heart rate on the same chart (heart rate on the right-hand scale).
+    var hrS = hr ? { name: 'Heart rate', col: '#d6336c', pts: pts(hr), width: 1.3, axis: 'right', fmt: function (v) { return Math.round(v) + ' bpm'; } } : null;
+    var y2 = { fmt: function (v) { return Math.round(v); }, label: 'bpm' }, main = null;
+    if (power && disc === 'Bike') main = { title: 'Power (15-second average) and heart rate', y: { fmt: function (v) { return Math.round(v); }, zero: true, label: 'W' },
+      s: { name: 'Power', col: '#00a86b', pts: pts(power), width: 1.5, fmt: function (v) { return Math.round(v) + ' W'; } } };
+    else if (speed && (disc === 'Run' || disc === 'Swim')) {
+      var per = disc === 'Run' ? 1000 : 100, unit = disc === 'Run' ? '/km' : '/100 m', pace = speed.map(function (v) { return v > (disc === 'Run' ? 1.2 : 0.3) ? per / v : null; });
+      main = { title: 'Pace and heart rate (faster is higher)', y: { fmt: A.fmtPace, invert: true, label: unit }, s: { name: 'Pace', col: TP.SPORT_COLOURS[disc], pts: pts(pace), width: 1.5, fmt: function (v) { return A.fmtPace(v) + ' ' + unit; } } };
+    } else if (speed) main = { title: 'Speed and heart rate', y: { fmt: function (v) { return v.toFixed(0); }, zero: true, label: 'km/h' },
+      s: { name: 'Speed', col: '#1f7aff', pts: pts(speed.map(function (v) { return fin(v) ? v * 3.6 : null; })), width: 1.5, fmt: function (v) { return v.toFixed(1) + ' km/h'; } } };
+    if (main) root.appendChild(TP.chart.xy({ title: main.title, height: 220, x: xAxis, tipX: tipX, bands: bands, y: main.y, y2: y2, series: [main.s].concat(hrS ? [hrS] : []) }));
+    else if (hr) root.appendChild(TP.chart.xy({ title: 'Heart rate (bpm)', height: 160, x: xAxis, tipX: tipX, bands: bands, y: { fmt: function (v) { return Math.round(v); } },
       series: [{ name: 'Heart rate (bpm)', col: '#d6336c', pts: pts(hr), width: 1.5 }] }));
     if (alt && disc !== 'Swim') root.appendChild(TP.chart.xy({ title: 'Elevation (m)', height: 110, x: xAxis, tipX: tipX, y: { fmt: function (v) { return Math.round(v); } },
       series: [{ name: 'Elevation (m)', col: '#8a8a8a', pts: pts(alt), width: 1.2, kind: 'area', fillAlpha: 0.2 }] }));

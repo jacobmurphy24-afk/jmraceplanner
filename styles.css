@@ -579,3 +579,5 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
 }
 
 .cbar-n { font-size: 0.7rem; color: var(--faint); margin-top: 2px; }
+
+.tc .ax-l { font-size: 10px; fill: #777; font-weight: 700; }

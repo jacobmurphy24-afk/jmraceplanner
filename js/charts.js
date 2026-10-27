@@ -44,7 +44,7 @@
   //      series: [{ name, col, kind: 'line'|'bar'|'dots'|'area', pts: [[x, y, colour?]], dash, width, stack, barW, alpha, hideTip }],
   //      bands: [{ x0, x1, fill, label }], vlines: [{ x, col, dash, label }], hlines: [{ y, col, dash }], legend, title }
   C.xy = function (o) {
-    var X = o.x || {}, Y = o.y || {}, H = o.height || 220;
+    var X = o.x || {}, Y = o.y || {}, Y2 = o.y2 || {}, H = o.height || 220;
     var tx = X.type === 'date' ? function (v) { return typeof v === 'string' ? dnum(v) : v; } : X.type === 'log' ? Math.log : function (v) { return v; };
     var series = o.series.filter(function (s) { return s.pts && s.pts.length; }).map(function (s) {
       return Object.assign({ kind: 'line', width: 2 }, s, { P: s.pts.map(function (p) { return [tx(p[0]), p[1], p[2]]; }) });
@@ -55,8 +55,10 @@
       if (!s.stack) return;
       s.P = s.P.map(function (p) { var b = base[p[0]] || 0; if (!fin(p[1])) return [p[0], null, p[2], b]; base[p[0]] = b + p[1]; return [p[0], b + p[1], p[2], b]; });
     });
-    var xsAll = [], ysAll = [];
-    series.forEach(function (s) { s.P.forEach(function (p) { xsAll.push(p[0]); if (fin(p[1])) ysAll.push(p[1]); if (s.kind === 'bar') ysAll.push(fin(p[3]) ? p[3] : 0); }); });
+    // Series with axis: 'right' use a second scale on the right (o.y2), e.g. heart rate beside pace.
+    var xsAll = [], ysAll = [], ys2 = [], right = series.filter(function (s) { return s.axis === 'right'; });
+    series.forEach(function (s) { var ys = s.axis === 'right' ? ys2 : ysAll; s.P.forEach(function (p) { xsAll.push(p[0]); if (fin(p[1])) ys.push(p[1]); if (s.kind === 'bar') ys.push(fin(p[3]) ? p[3] : 0); }); });
+    if (right.length && Y2.zero) ys2.push(0);
     (o.bands || []).forEach(function (b) { xsAll.push(tx(b.x0), tx(b.x1)); });
     (o.vlines || []).forEach(function (v) { xsAll.push(tx(v.x)); });
     (o.hlines || []).forEach(function (l) { ysAll.push(l.y); });
@@ -71,15 +73,30 @@
     if (!fin(Y.max)) y1 += pad;
     var yt = nice(y0, y1, H < 160 ? 3 : 5); y0 = Math.min(y0, yt[0]); y1 = Math.max(y1, yt[yt.length - 1]);
     var fy = Y.fmt || function (v) { return String(Math.round(v * 100) / 100); };
+    var r0 = 0, r1 = 1, yt2 = [], fy2 = Y2.fmt || fy;
+    if (ys2.length) {
+      r0 = fin(Y2.min) ? Y2.min : Math.min.apply(null, ys2); r1 = fin(Y2.max) ? Y2.max : Math.max.apply(null, ys2);
+      var pad2 = (r1 - r0 || Math.abs(r1) || 1) * 0.08;
+      if (!fin(Y2.min) && !(Y2.zero && r0 === 0)) r0 -= pad2;
+      if (!fin(Y2.max)) r1 += pad2;
+      yt2 = nice(r0, r1, H < 160 ? 3 : 5); r0 = Math.min(r0, yt2[0]); r1 = Math.max(r1, yt2[yt2.length - 1]);
+    }
     var fx = X.fmt || (X.type === 'date' ? function (v) { return TP.fmt(dstr(v), '%d %b'); } : X.type === 'log' ? function (v) { return String(Math.round(Math.exp(v))); } : function (v) { return String(Math.round(v * 10) / 10); });
     var allX = []; series.forEach(function (s) { if (!s.hideTip) s.P.forEach(function (p) { if (allX.indexOf(p[0]) < 0) allX.push(p[0]); }); });
     allX.sort(function (a, b) { return a - b; });
 
     var box = mount(H, function (W, tip) {
-      var L = Math.max(30, 8 + 6.2 * Math.max.apply(null, yt.map(function (v) { return String(fy(v)).length; }))), R = 10, T = 8, B = 22, pw = W - L - R, ph = H - T - B;
+      var L = Math.max(30, 8 + 6.2 * Math.max.apply(null, yt.map(function (v) { return String(fy(v)).length; })));
+      var R = yt2.length ? Math.max(30, 8 + 6.2 * Math.max.apply(null, yt2.map(function (v) { return String(fy2(v)).length; }))) : 10;
+      var T = Y.label || Y2.label ? 18 : 8, B = 22, pw = W - L - R, ph = H - T - B;
       var sx = function (v) { return L + (v - x0) / (x1 - x0) * pw; };
       var sy = function (v) { var f = (v - y0) / (y1 - y0); return T + (Y.invert ? f : 1 - f) * ph; };
+      var sy2 = function (v) { var f = (v - r0) / (r1 - r0); return T + (Y2.invert ? f : 1 - f) * ph; };
       var s = '';
+      if (Y.label) s += '<text x="' + L + '" y="11" class="ax-l">' + esc(Y.label) + '</text>';
+      if (Y2.label) s += '<text x="' + (W - R) + '" y="11" text-anchor="end" class="ax-l" fill="' + (right[0] ? right[0].col : '#777') + '">' + esc(Y2.label) + '</text>';
+      var rcol = right[0] ? right[0].col : '#777';
+      yt2.forEach(function (v) { s += '<text x="' + (W - R + 5) + '" y="' + (sy2(v) + 3.5) + '" class="ax" style="fill:' + rcol + '">' + esc(fy2(v)) + '</text>'; });
       (o.bands || []).forEach(function (b) {
         var a = sx(tx(b.x0)), c = sx(tx(b.x1));
         s += '<rect x="' + a + '" y="' + T + '" width="' + Math.max(0, c - a) + '" height="' + ph + '" fill="' + (b.fill || '#fff2d1') + '"/>';
@@ -102,8 +119,9 @@
         s += '<line x1="' + sx(v) + '" x2="' + sx(v) + '" y1="' + (T + ph) + '" y2="' + (T + ph + 3) + '" stroke="#bdbdbd"/><text x="' + sx(v) + '" y="' + (H - 6) + '" text-anchor="middle" class="ax">' + esc(lab) + '</text>';
       });
       // marks
+      var sy0 = sy, yLo = y0, yHi = y1;
       series.forEach(function (se) {
-        var op = se.alpha ? ' opacity="' + se.alpha + '"' : '';
+        var op = se.alpha ? ' opacity="' + se.alpha + '"' : '', sy = se.axis === 'right' ? sy2 : sy0, y0 = se.axis === 'right' ? r0 : yLo, y1 = se.axis === 'right' ? r1 : yHi;
         if (se.kind === 'bar') {
           var bw = Math.max(1, (se.barW || 1) / (x1 - x0) * pw - 2);
           se.P.forEach(function (p) {
@@ -144,7 +162,7 @@
           if (se.hideTip || !se.name) return;
           var p = se.P.filter(function (q) { return q[0] === best; })[0]; if (!p || !fin(p[1])) return;
           var val = se.stack ? p[1] - (p[3] || 0) : p[1];
-          tip.appendChild(h('div', { class: 'tc-tip-r' }, h('i', { style: 'background:' + (p[2] || se.col) }), h('b', null, (se.fmt || fy)(val)), h('span', null, se.name)));
+          tip.appendChild(h('div', { class: 'tc-tip-r' }, h('i', { style: 'background:' + (p[2] || se.col) }), h('b', null, (se.fmt || (se.axis === 'right' ? fy2 : fy))(val)), h('span', null, se.name)));
         });
         tip.style.display = 'block';
         var tw = tip.offsetWidth; tip.style.left = Math.min(Math.max(4, cx + 12 > W - tw - 4 ? cx - tw - 12 : cx + 12), W - tw - 4) + 'px'; tip.style.top = T + 'px';
