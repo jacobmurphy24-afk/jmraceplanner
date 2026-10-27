@@ -1909,7 +1909,7 @@
       pt = PLAN_TYPE[disc][type] || 'Other';
       if (disc === 'Swim' && a.swim_env === 'Open water') pt = 'Open water';
       pd = disc === 'Bike' ? (/virtual|indoor|trainer/.test(key) ? 'Indoor Bike' : 'Outdoor Bike') : disc;
-    } else if (/strength/.test(key)) { pd = 'Gym'; pt = 'Strength'; }
+    } else if (/strength/.test(key)) { pd = 'Strength'; pt = 'Strength'; }
     else if (/row|ski/.test(key)) { pd = 'Hyrox'; pt = 'Erg intervals'; }
     else if (/hiit|hyrox|cardio|fitness/.test(key)) { pd = 'Hyrox'; pt = 'Simulation'; }
     else return null;
@@ -1920,7 +1920,7 @@
     if (wu + cd >= km) { wu = 0; cd = 0; }
     var mins = Math.round((a.moving_s || 0) / 60);
     var bits = [s.label || null, mins > 0 ? mins + ' min' : null, fin(a.avg_hr) ? 'avg HR ' + Math.round(a.avg_hr) : null, disc === 'Bike' && fin(a.np) ? Math.round(a.np) + ' W NP' : null].filter(Boolean);
-    var byTime = pd === 'Gym' || pd === 'Hyrox' || km === 0;
+    var byTime = pd === 'Strength' || pd === 'Hyrox' || km === 0;
     return { discipline: pd, type: pt, details: 'From Garmin: ' + (a.name || 'activity') + ' (' + TP.fmt(a.date, '%d %b %Y') + '). ' + bits.join(' · ') + '.',
       wu_cd_check: wu + cd > 0, wu_dist: wu, cd_dist: cd, total_dist: km, num_sets: 1, main_dist_1: Math.max(0, Math.round((km - wu - cd) * 100) / 100),
       main_dist_2: 0, main_dist_3: 0, main_dist_4: 0, main_dist_5: 0, plan_by: byTime ? 'Time' : 'Distance', duration_min: byTime ? mins : null };

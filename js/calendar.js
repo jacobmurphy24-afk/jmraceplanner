@@ -61,7 +61,7 @@
     var ex = TP.match.extraOn(d);
     var dots = ds.length || ex.length ? h('div', { class: 'yv-dots' }, ds.slice(0, 3).map(function (s) {
       var st = TP.match.status(s), k = st ? st.st : '';
-      return h('span', { class: 'yv-dot' + (k ? ' st-' + k : ''), title: TP.sportLabel(s.discipline) + ' · ' + s.type + (k ? ' (' + TP.match.STATUS_LABEL[k].toLowerCase() + ')' : ''), style: 'background:' + TP.typeCol(s.type) + (k === 'done' || k === 'partial' ? '' : '55'),
+      return h('span', { class: 'yv-dot' + (k ? ' st-' + k : ''), title: TP.sessionName(s, ' · ') + (k ? ' (' + TP.match.STATUS_LABEL[k].toLowerCase() + ')' : ''), style: 'background:' + TP.typeCol(s.type) + (k === 'done' || k === 'partial' ? '' : '55'),
         onclick: stop(function () { TP.select(d); TP.sessionView(s.id); }) }, TP.SPORT_LETTER[TP.sportOf(s.discipline)] || '?');
     }), ds.length > 3 ? h('span', { class: 'yv-more' }, '+' + (ds.length - 3)) : null,
       ds.length <= 3 && ex.length ? h('span', { class: 'yv-act', title: ex.length + (ex.length > 1 ? ' activities' : ' activity') + ' not in a plan', onclick: stop(function () { TP.select(d); TP.activityView(ex[0].id); }) }, '●') : null) : null;
@@ -109,16 +109,16 @@
     if (a) return doneChip(a, k, s);
     var act = a ? (a.distance_m > 50 ? TP.round(a.distance_m / 1000, 1) + ' km' : Math.round((a.moving_s || 0) / 60) + ' min') : '';
     return h('div', { class: 'mchip' + (k ? ' mchip-' + k : ''), style: 'border-left-color:' + TP.typeCol(s.type),
-      title: TP.sportLabel(s.discipline) + ' · ' + s.type + (k && k !== 'pending' ? ' — ' + TP.match.STATUS_LABEL[k].toLowerCase() + (a ? ': ' + a.name : '') : ''),
+      title: TP.sessionName(s, ' · ') + (k && k !== 'pending' ? ' — ' + TP.match.STATUS_LABEL[k].toLowerCase() + (a ? ': ' + a.name : '') : ''),
       onclick: stop(function () { TP.select(s.date); TP.sessionView(s.id); }) },
       TP.match.STATUS_ICON[k] ? h('span', { class: 'mchip-tick' }, TP.match.STATUS_ICON[k]) : null,
-      h('span', { class: 'mchip-t' }, TP.sportLabel(s.discipline) + ' ' + s.type), h('span', { class: 'mchip-d' }, a ? act : TP.planAmount(s)));
+      h('span', { class: 'mchip-t' }, TP.sessionName(s)), h('span', { class: 'mchip-d' }, a ? act : TP.planAmount(s)));
   }
   // A Garmin activity that completes a planned session takes its place: green when done, orange when partly.
   function doneChip(a, k, s) {
     var amt = a.distance_m > 50 ? TP.round(a.distance_m / 1000, 1) + ' km' : a.moving_s ? Math.round(a.moving_s / 60) + ' min' : '';
     return h('div', { class: 'mchip mchip-act mchip-' + k, style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || TP.typeCol(s.type)),
-      title: 'Garmin: ' + (a.name || a.type) + ' — ' + TP.match.STATUS_LABEL[k].toLowerCase() + ' (planned: ' + TP.sportLabel(s.discipline) + ' ' + s.type + ', ' + TP.planAmount(s) + ')',
+      title: 'Garmin: ' + (a.name || a.type) + ' — ' + TP.match.STATUS_LABEL[k].toLowerCase() + ' (planned: ' + TP.sessionName(s) + ', ' + TP.planAmount(s) + ')',
       onclick: stop(function () { TP.select(a.date); TP.activityView(a.id); }) },
       h('span', { class: 'mchip-tick' }, TP.match.STATUS_ICON[k]), h('span', { class: 'mchip-t' }, a.name || a.sport), h('span', { class: 'mchip-d' }, amt));
   }
@@ -232,7 +232,7 @@
       if (st && st.act && st.act.date === d) return;   // shown below as its Garmin activity
       root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.sessionView(s.id); } },
         h('span', { class: 'dot', style: 'background:' + TP.typeCol(s.type) }),
-        h('span', { class: 'grow' }, TP.sportLabel(s.discipline) + ' · ' + s.type),
+        h('span', { class: 'grow' }, TP.sessionName(s, ' · ')),
         TP.match.STATUS_ICON[k] ? h('span', { class: 'st-tick st-' + k, title: TP.match.STATUS_LABEL[k] }, TP.match.STATUS_ICON[k]) : null,
         h('span', { class: 'muted' }, TP.planAmount(s))));
     });

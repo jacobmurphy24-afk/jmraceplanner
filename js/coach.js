@@ -210,7 +210,7 @@
           var what = l ? h('span', { class: st && st.st === 'partial' ? 'st-tick st-partial' : 'st-tick st-done' }, (st && st.st === 'partial' ? '◐ ' : '✓ ') + (l.act.name || 'Activity') + (l.act.distance_m > 50 ? sp(' · %.1f km', l.act.distance_m / 1000) : '') + ' · ' + TP.fmtDuration(l.act.moving_s || 0))
             : due ? h('span', { class: 'st-tick st-missed' }, '✕ Missed') : h('span', { class: 'muted' }, 'Coming up');
           return h('tr', { class: 'click', onclick: function () { TP.sessionView(s.id); } }, h('td', { class: 'nowrap' }, TP.fmt(s.date, '%a %d %b')),
-            h('td', null, h('span', { class: 'sdot', style: 'background:' + TP.typeCol(s.type) }), TP.sportLabel(s.discipline) + ' · ' + s.type),
+            h('td', null, h('span', { class: 'sdot', style: 'background:' + TP.typeCol(s.type) }), TP.sessionName(s, ' · ')),
             h('td', null, s.total_dist > 0 ? TP.round(s.total_dist, 2) + ' km' : s.duration_min > 0 ? s.duration_min + ' min' : '–'), h('td', null, what));
         })))));
     }
@@ -245,7 +245,7 @@
       var x = A.activityToPlan(row, ctx.feats[row.id]); if (!x) return;
       list.push(TP.normaliseSession(Object.assign({ id: 'g' + id, date: row.date, block_id: '' }, x)));
     });
-    if (!list.length) { TP.toast('None of these activities has a planner sport (Swim, Run, Bike, Hyrox or Gym).', 'warn'); return; }
+    if (!list.length) { TP.toast('None of these activities has a planner sport (Swim, Run, Bike, Hyrox or Strength).', 'warn'); return; }
     TP.clip.week = { start: wk, sessions: list };
     TP.toast('Copied ' + list.length + ' Garmin sessions from the week of ' + TP.fmt(wk, '%d %b %Y') + '. In the Calendar, pick a day in the week you want and press Paste week.');
   };

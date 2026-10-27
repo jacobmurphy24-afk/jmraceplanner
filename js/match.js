@@ -37,8 +37,8 @@
   // Can this activity be the planned session? Hyrox can be logged as a run or a fitness activity; gym as strength.
   function fits(s, a) {
     var sp = TP.sportOf(s.discipline), k = String(a.type || '').toLowerCase();
-    if (a.multisport) return sp !== 'Gym';
-    if (sp === 'Gym') return a.sport === 'Gym' || /strength|fitness|training/.test(k);
+    if (a.multisport) return sp !== 'Strength';
+    if (sp === 'Strength') return a.sport === 'Strength' || /strength|fitness|training/.test(k);
     if (sp === 'Hyrox') return a.sport === 'Hyrox' || (a.sport === 'Run' && !/^running$|trail/.test(k)) || /hiit|hyrox|row|ski/.test(k);
     if (s.plan_by === 'Brick') return a.sport === 'Bike' || a.sport === 'Run';
     return a.sport === sp;
@@ -48,7 +48,7 @@
   // The planned amount and what was done, for the completion status.
   function plannedAmount(s) {
     var sp = TP.sportOf(s.discipline);
-    if (sp === 'Gym' || sp === 'Hyrox' || (s.plan_by === 'Time' && s.duration_min > 0) || !(s.total_dist > 0)) return s.duration_min > 0 ? { min: s.duration_min } : null;
+    if (sp === 'Strength' || sp === 'Hyrox' || (s.plan_by === 'Time' && s.duration_min > 0) || !(s.total_dist > 0)) return s.duration_min > 0 ? { min: s.duration_min } : null;
     return { km: s.total_dist };
   }
 
@@ -131,7 +131,7 @@
     var today = TP.today(), end = to < today ? to : TP.addDays(today, -1);
     var pl = TP.state.sessions.filter(function (s) { return s.date >= from && s.date <= end && (!blockId || s.block_id === blockId); });
     if (!pl.length) return null;
-    var disc = function (s) { var sp = TP.sportOf(s.discipline); return sp === 'Gym' || sp === 'Hyrox' ? 'Other' : sp; };
+    var disc = function (s) { var sp = TP.sportOf(s.discipline); return sp === 'Strength' || sp === 'Hyrox' ? 'Other' : sp; };
     var rows = pl.map(function (s) { var l = M.linkFor(s.id); return { s: s, disc: disc(s), done: !!l, km: l ? km(l.act) : 0 }; });
     var g = {}; rows.forEach(function (r) { var x = g[r.disc] = g[r.disc] || { disc: r.disc, planned: 0, done: 0, planned_km: 0, actual_km: 0 }; x.planned++; if (r.done) x.done++; x.planned_km += r.s.total_dist || 0; x.actual_km += r.km; });
     var pk = rows.reduce(function (t, r) { return t + (r.s.total_dist || 0); }, 0), ak = rows.reduce(function (t, r) { return t + (r.s.total_dist > 0 ? r.km : 0); }, 0);
@@ -179,7 +179,7 @@
           h('div', { class: 'sugg-pair' },
             h('div', { class: 'sugg-side' }, h('div', { class: 'lbl' }, 'Garmin activity'), h('b', null, a.name || a.type), h('div', { class: 'muted small' }, TP.fmt(a.date, '%A %d %b') + ' · ' + actAmount(a))),
             h('div', { class: 'sugg-arrow' }, '→'),
-            h('div', { class: 'sugg-side' }, h('div', { class: 'lbl' }, 'Planned session'), h('b', null, h('span', { class: 'sdot', style: 'background:' + TP.typeCol(s.type) }), TP.sportLabel(s.discipline) + ' · ' + s.type),
+            h('div', { class: 'sugg-side' }, h('div', { class: 'lbl' }, 'Planned session'), h('b', null, h('span', { class: 'sdot', style: 'background:' + TP.typeCol(s.type) }), TP.sessionName(s, ' · ')),
               h('div', { class: 'muted small' }, TP.fmt(s.date, '%A %d %b') + (TP.planAmount(s) ? ' · ' + TP.planAmount(s) : '')))),
           h('div', { class: 'btn-row' },
             h('button', { class: 'btn btn-sm', onclick: function () { x.done = true; M.reject(x.sid, x.aid); draw(); } }, 'No, it wasn’t'),
@@ -203,7 +203,7 @@
     var list = TP.garmin.acts.filter(function (a) { return a.date >= from && a.date <= to; })
       .sort(function (a, b) { return (fits(s, b) - fits(s, a)) || Math.abs(TP.daysBetween(a.date, s.date)) - Math.abs(TP.daysBetween(b.date, s.date)); });
     var m = TP.modal({ size: 'm', stack: true, title: h('div', null, h('div', { class: 'md-t' }, 'Link a Garmin activity'),
-      h('div', { class: 'md-sub' }, TP.sportLabel(s.discipline) + ' · ' + s.type + ' planned for ' + TP.fmt(s.date, '%A %d %b'))),
+      h('div', { class: 'md-sub' }, TP.sessionName(s, ' · ') + ' planned for ' + TP.fmt(s.date, '%A %d %b'))),
       body: list.length ? h('div', { class: 'pick-list' }, list.map(function (a) {
         var other = c.byAct[a.id] && c.byAct[a.id] !== sid ? TP.state.sessions.filter(function (x) { return x.id === c.byAct[a.id]; })[0] : null;
         return h('button', { class: 'list-item' + (fits(s, a) ? '' : ' dim'), onclick: function () { m.close(); M.link(sid, a.id); TP.toast('Linked to ' + (a.name || a.type) + '.'); } },
@@ -224,7 +224,7 @@
         var l = c.bySession[s.id];
         return h('button', { class: 'list-item' + (fits(s, a) ? '' : ' dim'), onclick: function () { m.close(); M.link(s.id, aid); TP.toast('Linked.'); } },
           h('span', { class: 'dot', style: 'background:' + TP.typeCol(s.type) }),
-          h('span', { class: 'grow' }, h('b', null, TP.sportLabel(s.discipline) + ' · ' + s.type), h('div', { class: 'muted small' }, TP.fmt(s.date, '%a %d %b') + (TP.planAmount(s) ? ' · ' + TP.planAmount(s) : '') + (l && l.act.id !== aid ? ' · already linked to ' + (l.act.name || 'another activity') : ''))));
+          h('span', { class: 'grow' }, h('b', null, TP.sessionName(s, ' · ')), h('div', { class: 'muted small' }, TP.fmt(s.date, '%a %d %b') + (TP.planAmount(s) ? ' · ' + TP.planAmount(s) : '') + (l && l.act.id !== aid ? ' · already linked to ' + (l.act.name || 'another activity') : ''))));
       })) : h('p', { class: 'muted' }, 'No sessions planned around then.'),
       footer: h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Cancel') });
   };

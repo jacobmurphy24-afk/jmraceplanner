@@ -41,6 +41,7 @@
     var out = { events: s.events || {}, sessions: Array.isArray(s.sessions) ? s.sessions : [], templates: s.templates || {}, prefs: Object.assign({ units: 'metric', rpAxis: 'Time' }, s.prefs || {}) };
     out.sessions = out.sessions.map(normaliseSession);
     Object.keys(out.events).forEach(function (id) { out.events[id] = normaliseEvent(out.events[id]); });
+    Object.keys(out.templates).forEach(function (k) { var t = out.templates[k]; if (t && t.discipline === 'Gym') out.templates[k] = Object.assign({}, t, { discipline: 'Strength' }); });
     return out;
   }
   function normaliseSession(x) {
@@ -51,6 +52,7 @@
     s.id = String(s.id); s.block_id = s.block_id ? String(s.block_id) : '';
     s.wu_cd_check = s.wu_cd_check === true || s.wu_cd_check === 'TRUE';
     if (!s.plan_by) s.plan_by = 'Distance';
+    if (s.discipline === 'Gym') s.discipline = 'Strength';   // renamed from Gym
     return s;
   }
   function normaliseEvent(p) {
@@ -129,7 +131,7 @@
   TP.estHours = function (s) {
     var sp = TP.sportOf(s.discipline);
     if (s.duration_min > 0) return s.duration_min / 60;
-    if (sp === 'Gym') return 0.75;
+    if (sp === 'Strength') return 0.75;
     var pace = TP.PLAN_PACE_H_KM[sp]; if (pace === undefined) pace = 0.1;
     return (s.total_dist || 0) * pace;
   };

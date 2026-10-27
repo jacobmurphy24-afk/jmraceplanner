@@ -111,7 +111,7 @@
       root.appendChild(h('div', { class: 'panel g-link' }, h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'Not linked to a planned session.'),
         h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm btn-primary', onclick: function () { M.pickSession(id); } }, 'Link to a planned session'),
           main ? h('button', { class: 'btn btn-sm needs-edit', onclick: function () {
-            var x = A.activityToPlan(main, f, type); if (!x) { TP.toast('This kind of activity has no planner sport (Swim, Run, Bike, Hyrox or Gym).', 'warn'); return; }
+            var x = A.activityToPlan(main, f, type); if (!x) { TP.toast('This kind of activity has no planner sport (Swim, Run, Bike, Hyrox or Strength).', 'warn'); return; }
             var ns = TP.normaliseSession(Object.assign({ id: TP.uid(), date: a.date, block_id: TP.trainingBlockOn(a.date) }, x));
             TP.upsertSession(ns); M.link(ns.id, id); TP.toast('Added to the plan on ' + TP.fmt(a.date, '%a %d %b') + '.');
           } }, TP.icon('plus'), 'Add to the plan') : null)));
@@ -168,7 +168,7 @@
   TP.saveActivity = function (rowId, type) {
     var ctx = TP.garmin.ctx(), a = ctx.byId[rowId]; if (!a) return;
     var x = A.activityToPlan(a, ctx.feats[rowId], type);
-    if (!x) { TP.toast('This activity type has no matching planner sport (Swim, Run, Bike, Hyrox or Gym).', 'warn'); return; }
+    if (!x) { TP.toast('This activity type has no matching planner sport (Swim, Run, Bike, Hyrox or Strength).', 'warn'); return; }
     var name = TP.input('text', (a.name || 'Session') + ' ' + TP.fmt(a.date, '%d %b')), date = TP.input('date', TP.addDays(TP.today(), 1));
     var m = TP.modal({ size: 'm', stack: true, title: h('div', { class: 'md-t' }, 'Save this session'),
       body: [h('div', { class: 'panel' }, h('b', null, TP.sportLabel(x.discipline) + ' · ' + x.type), h('div', { class: 'small', style: 'margin-top:4px' }, x.details),

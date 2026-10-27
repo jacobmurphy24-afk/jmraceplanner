@@ -66,6 +66,7 @@
   G.load = function () {
     return Promise.all([getAll('acts'), getAll('feats'), getAll('wellness')]).then(function (r) {
       G.acts = (r[0] || []).sort(function (a, b) { return a.start < b.start ? 1 : -1; });
+      G.acts.forEach(function (a) { if (a.sport === 'Gym') a.sport = 'Strength'; });   // renamed from Gym
       G.frecs = {}; (r[1] || []).forEach(function (f) { G.frecs[f.id] = f; });
       G.wellness = (r[2] || []).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
       G.loaded = true; G.ver++; TP.changed();
@@ -127,7 +128,7 @@
     if (k.indexOf('swim') >= 0) return 'Swim';
     if (k.indexOf('run') >= 0) return 'Run';
     if (/cycl|bik|ride/.test(k)) return 'Bike';
-    if (/strength|weight|gym/.test(k)) return 'Gym';
+    if (/strength|weight|gym/.test(k)) return 'Strength';
     if (/hyrox|hiit|row|ski_erg|indoor_cardio|fitness_equipment/.test(k)) return 'Hyrox';
     return 'Other';
   }

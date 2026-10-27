@@ -22,13 +22,13 @@ window.TP = window.TP || {};
   TP.EVENT_TYPES = ['Triathlon', 'Duathlon', 'Run', 'Swim', 'Bike', 'Hyrox', 'Training Only'];
 
   // Bikes are stored as "Indoor Bike" / "Outdoor Bike" so older workspaces keep working.
-  TP.SPORTS = ['Swim', 'Run', 'Bike', 'Hyrox', 'Gym'];
+  TP.SPORTS = ['Swim', 'Run', 'Bike', 'Hyrox', 'Strength'];
   TP.SESSION_TYPES = {
     Swim: ['Endurance', 'Tempo', 'Speed', 'Mixed', 'Technique', 'Open water', 'Brick', 'Recovery', 'Other'],
     Run: ['Easy', 'Long', 'Tempo', 'Intervals', 'Hills', 'Fartlek', 'Brick', 'Recovery', 'Race', 'Other'],
     Bike: ['Endurance', 'Long', 'Tempo', 'Sweet spot', 'Intervals', 'Hills', 'Brick', 'Recovery', 'Race', 'Other'],
     Hyrox: ['Simulation', 'Compromised running', 'Stations', 'Strength endurance', 'Erg intervals', 'Race', 'Other'],
-    Gym: ['Strength', 'Hypertrophy', 'Power', 'Mobility', 'Core', 'Circuit', 'Other']
+    Strength: ['Strength', 'Hypertrophy', 'Power', 'Mobility', 'Core', 'Circuit', 'Other']
   };
   // Colour by what the session does: greens easy, blue long, ambers steady-hard, reds hard, purples race-specific, slates gym.
   TP.TYPE_COLOURS = {
@@ -38,13 +38,13 @@ window.TP = window.TP || {};
     'Compromised running': '#aa4fff', 'Strength endurance': '#c88dff', Strength: '#111111', Hypertrophy: '#585858', Power: '#111111',
     Circuit: '#7c7c7c', Other: '#a0a0a0', Race: '#111111'
   };
-  TP.SPORT_COLOURS = { Swim: '#1f7aff', Run: '#ff3b30', Bike: '#00a86b', Hyrox: '#9b30ff', Gym: '#585858' };
+  TP.SPORT_COLOURS = { Swim: '#1f7aff', Run: '#ff3b30', Bike: '#00a86b', Hyrox: '#9b30ff', Strength: '#585858' };
   // Pie shades: one hue per sport, dark to light across that sport's session types.
-  TP.SPORT_SHADES = { Swim: ['#84b6ff', '#e4efff'], Run: ['#ff938d', '#ffe7e6'], Bike: ['#73cfae', '#e0f5ed'], Hyrox: ['#c88dff', '#f3e6ff'], Gym: ['#a3a3a3', '#ebebeb'] };
+  TP.SPORT_SHADES = { Swim: ['#84b6ff', '#e4efff'], Run: ['#ff938d', '#ffe7e6'], Bike: ['#73cfae', '#e0f5ed'], Hyrox: ['#c88dff', '#f3e6ff'], Strength: ['#a3a3a3', '#ebebeb'] };
   // Typical hours per km, used to estimate time from distance (and distance from time).
-  TP.PLAN_PACE_H_KM = { Run: 1 / 11, Bike: 1 / 27, Swim: 1 / 3, Hyrox: 1 / 8, Gym: 0 };
+  TP.PLAN_PACE_H_KM = { Run: 1 / 11, Bike: 1 / 27, Swim: 1 / 3, Hyrox: 1 / 8, Strength: 0 };
   TP.PRIORITY_LABELS = { 1: 'Season goal', 2: 'Major race', 3: 'Important race', 4: 'Minor race', 5: 'Training race' };
-  TP.SPORT_LETTER = { Swim: 'S', Run: 'R', Bike: 'B', Gym: 'G', Hyrox: 'H' };
+  TP.SPORT_LETTER = { Swim: 'S', Run: 'R', Bike: 'B', Strength: 'St', Hyrox: 'H' };
 
   // Event distance options and form defaults, per event type.
   TP.EVENT_DISTANCES = {
@@ -66,8 +66,10 @@ window.TP = window.TP || {};
 
   // --- Small helpers ---
   TP.num = function (x, dflt) { var v = parseFloat(x); return isFinite(v) ? v : (dflt === undefined ? NaN : dflt); };
-  TP.sportOf = function (disc) { return (disc === 'Indoor Bike' || disc === 'Outdoor Bike' || disc === 'Bike') ? 'Bike' : disc; };
+  TP.sportOf = function (disc) { return (disc === 'Indoor Bike' || disc === 'Outdoor Bike' || disc === 'Bike') ? 'Bike' : disc === 'Gym' ? 'Strength' : disc; };
   TP.sportLabel = function (disc) { return (disc === 'Indoor Bike' || disc === 'Outdoor Bike') ? disc.replace(' Bike', '') + ' bike' : disc; };
+  // "Run Intervals", "Strength Core"; a Strength session of type Strength is just "Strength".
+  TP.sessionName = function (s, sep) { var l = TP.sportLabel(s.discipline); return s.type && s.type !== l ? l + (sep || ' ') + s.type : l; };
   TP.typeCol = function (type) { return TP.TYPE_COLOURS[type] || '#2e2c27'; };
   TP.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   TP.uid = function () { return String(Date.now()) + String(Math.floor(Math.random() * 1000)).padStart(3, '0'); };

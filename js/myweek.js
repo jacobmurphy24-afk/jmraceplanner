@@ -155,7 +155,7 @@
         var st = hasG ? M.status(s) : null, k = st ? st.st : '';
         if (st && st.act) return;   // done: its Garmin activity is shown in its place, below
         col.appendChild(h('div', { class: 'mchip' + (k ? ' mchip-' + k : ''), style: 'border-left-color:' + TP.typeCol(s.type), onclick: function () { TP.sessionView(s.id); } },
-          M.STATUS_ICON[k] ? h('span', { class: 'mchip-tick' }, M.STATUS_ICON[k]) : null, h('span', { class: 'mchip-t' }, TP.sportLabel(s.discipline) + ' ' + s.type),
+          M.STATUS_ICON[k] ? h('span', { class: 'mchip-tick' }, M.STATUS_ICON[k]) : null, h('span', { class: 'mchip-t' }, TP.sessionName(s)),
           h('span', { class: 'mchip-s' }, String(s.discipline).replace(/^(Indoor|Outdoor) /, '')), h('span', { class: 'mchip-d' }, TP.planAmount(s))));
       });
       da.forEach(function (a) {

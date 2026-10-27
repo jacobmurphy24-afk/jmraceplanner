@@ -106,7 +106,7 @@
     var col = TP.typeCol(s.type), sport = TP.sportOf(s.discipline), dur = s.duration_min, panel;
     var n = Math.max(1, Math.min(5, Math.round(s.num_sets) || 1)), sets = [];
     for (var i = 1; i <= n; i++) sets.push(s['main_dist_' + i] || 0);
-    if (sport === 'Gym') panel = h('div', { class: 'panel' }, h('div', { class: 'lbl' }, 'Duration'), h('div', { class: 'big' }, dur ? dur + ' min' : '–'));
+    if (sport === 'Strength') panel = h('div', { class: 'panel' }, h('div', { class: 'lbl' }, 'Duration'), h('div', { class: 'big' }, dur ? dur + ' min' : '–'));
     else if (s.plan_by === 'Brick' && TP.brickLegs(s.brick)) panel = h('div', { class: 'panel' }, h('div', { class: 'lbl' }, 'Brick'), h('div', { class: 'big' }, TP.round(s.total_dist, 2) + ' km'),
       h('div', { class: 'strong' }, TP.brickText(s.brick)));
     else if (s.plan_by === 'Builder') panel = h('div', { class: 'panel' }, h('div', { class: 'lbl' }, 'Workout'),
@@ -189,7 +189,7 @@
     })), f.block_id);
     var typeBox = h('div'), structBox = h('div'), envBox = h('div'), builderTick = h('div'), planSeg = h('div');
     var curType = f.type;
-    var durGym = TP.input('number', sport === 'Gym' ? f.duration_min : '', { min: 0, step: 5, inputmode: 'numeric' });
+    var durGym = TP.input('number', sport === 'Strength' ? f.duration_min : '', { min: 0, step: 5, inputmode: 'numeric' });
     var durTime = TP.input('number', f.plan_by === 'Time' ? f.duration_min : '', { min: 0, step: 5, inputmode: 'numeric', oninput: drawEstimate });
     var estBox = h('div', { class: 'est' });
     var nSets = TP.input('number', Math.max(1, Math.round(f.num_sets) || 1), { min: 1, max: 5, step: 1, inputmode: 'numeric', oninput: function () { drawSets(); autoTotal(); } });
@@ -278,8 +278,8 @@
     // --- Structure: which planning panel shows ---
     function drawStruct() {
       TP.clear(structBox); TP.clear(builderTick); TP.clear(planSeg);
-      if (sport === 'Gym') {
-        structBox.appendChild(h('div', { class: 'panel grid-fields' }, TP.field('Duration', durGym, 'min'), h('div', { class: 'hint wide' }, 'Gym sessions are planned by time. Put the exercises in the notes.')));
+      if (sport === 'Strength') {
+        structBox.appendChild(h('div', { class: 'panel grid-fields' }, TP.field('Duration', durGym, 'min'), h('div', { class: 'hint wide' }, 'Strength sessions are planned by time. Put the exercises in the notes.')));
         return;
       }
       builderTick.appendChild(h('label', { class: 'check' }, TP.input('checkbox', '', { checked: useBuilder, onchange: function () { useBuilder = this.checked; drawStruct(); } }), 'Detailed workout (targets, recoveries, repeats)'));
@@ -301,13 +301,13 @@
 
     // Everything typed so far, as a session-shaped object (for saving and templates).
     function collect() {
-      var dsc = disc(), plan = dsc === 'Gym' ? 'Time' : useBuilder ? 'Builder' : curType === 'Brick' ? 'Brick' : planBy;
+      var dsc = disc(), plan = dsc === 'Strength' ? 'Time' : useBuilder ? 'Builder' : curType === 'Brick' ? 'Brick' : planBy;
       var out = { block_id: blockSel.value, discipline: dsc, type: curType, details: notes.value, plan_by: plan, workout: '', brick: '' };
       var md = [0, 0, 0, 0, 0], tot = toKm(totIn), wu = wuChk.checked, wuD = toKm(wuIn), cdD = toKm(cdIn), n = Math.max(1, Math.min(5, Math.round(TP.num(nSets.value, 1))));
       for (var i = 0; i < 5; i++) { var v = toKm(setIns[i]); md[i] = i < n && isFinite(v) ? v : 0; }
       if (!isFinite(tot)) tot = 0;
-      var dur = dsc === 'Gym' ? TP.num(durGym.value, NaN) : plan === 'Time' ? TP.num(durTime.value, NaN) : NaN;
-      if (plan === 'Time' && dsc !== 'Gym') {
+      var dur = dsc === 'Strength' ? TP.num(durGym.value, NaN) : plan === 'Time' ? TP.num(durTime.value, NaN) : NaN;
+      if (plan === 'Time' && dsc !== 'Strength') {
         // Planned by time: the distance is an estimate at a typical pace, as one block.
         var pace = TP.PLAN_PACE_H_KM[TP.sportOf(dsc)];
         tot = ['Run', 'Bike', 'Swim'].indexOf(TP.sportOf(dsc)) >= 0 && dur > 0 ? TP.round(dur / 60 / pace, 1) : 0;
