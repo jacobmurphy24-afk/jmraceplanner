@@ -97,32 +97,41 @@
   };
 
   // --- The review ---
+  // A review opens as its own page within Analysis (the back link returns to the tiles).
   B.open = function (rv) {
-    var body = h('div'), m;
-    var head = h('div', { class: 'rp-m-head', style: '--c:' + sportCol(rv.sport) }, h('div', null, h('div', { class: 'rp-type', style: 'color:' + sportCol(rv.sport) }, rv.sport.toUpperCase()), h('div', { class: 'md-t' }, rv.name),
-      h('div', { class: 'md-sub' }, TP.fmt(rv.start, '%d %b %Y') + ' – race ' + TP.fmt(rv.race_date, '%d %b %Y'))));
-    var G = TP.garmin;
-    var foot = [
-      G.connected() ? h('button', { class: 'btn btn-sm', onclick: function () { G.sync(rv.start, rv.race_date < TP.today() ? TP.addDays(rv.race_date, 1) : TP.today(), true).then(function () { m.close(); B.open(rv); }); } }, TP.icon('download'), 'Sync this block') : null,
-      h('button', { class: 'btn btn-sm', onclick: function () { m.close(); B.form(rv); } }, TP.icon('pencil'), rv.auto ? 'Customise' : 'Edit'),
-      !rv.auto ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () { TP.confirm('Delete the review “' + rv.name + '”? Your Garmin activities aren’t affected.', 'Delete', function () { deleteReview(rv.id); m.close(); }); } }, 'Delete') : null,
-      h('span', { class: 'grow' }), h('button', { class: 'btn btn-primary btn-sm', onclick: function () { m.close(); } }, 'Close')];
-    m = TP.modal({ size: 'xl', title: head, body: body, footer: foot });
+    TP.closeModals();
+    TP.view.page = 'garmin'; TP.view.gtab = 'Block reviews'; TP.view.review = rv; TP.view.reviewTab = 'Summary';
+    TP.render();
+    var main = document.getElementById('main'); if (main) main.scrollTop = 0; window.scrollTo(0, 0);
+  };
+  B.close = function () { TP.view.review = null; TP.render(); };
+  B.page = function (root, rv) {
+    var G = TP.garmin, col = sportCol(rv.sport);
+    root.appendChild(h('a', { href: '#', class: 'back-link', onclick: function (e) { e.preventDefault(); B.close(); } }, '← All block reviews'));
+    root.appendChild(h('div', { class: 'br-page-head', style: '--c:' + col },
+      h('div', null, h('div', { class: 'rp-type', style: 'color:' + col }, rv.sport.toUpperCase()), h('h2', null, rv.name),
+        h('div', { class: 'muted' }, TP.fmt(rv.start, '%d %b %Y') + ' – race ' + TP.fmt(rv.race_date, '%d %b %Y'))),
+      h('div', { class: 'btn-row' },
+        G.connected() ? h('button', { class: 'btn btn-sm', disabled: !!G.syncing, onclick: function () { G.sync(rv.start, rv.race_date < TP.today() ? TP.addDays(rv.race_date, 1) : TP.today(), true); } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync this block') : null,
+        h('button', { class: 'btn btn-sm', onclick: function () { B.form(rv); } }, TP.icon('pencil'), rv.auto ? 'Customise' : 'Edit'),
+        !rv.auto ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () { TP.confirm('Delete the review “' + rv.name + '”? Your Garmin activities aren’t affected.', 'Delete', function () { deleteReview(rv.id); B.close(); }); } }, 'Delete') : null)));
+    if (G.progress) root.appendChild(h('div', { class: 'sync-progress' }, G.progress));
+    if (!G.loaded) { root.appendChild(h('p', { class: 'muted' }, 'Loading…')); return; }
     var r = B.result(rv);
     if (r.empty) {
-      body.appendChild(h('div', { class: 'empty' }, h('h3', null, r.error ? 'Couldn’t analyse this block' : 'No Garmin activities in this block yet'),
-        h('p', null, r.error || 'Sync the block’s dates from Garmin (Sync this block below) to see the review.')));
+      root.appendChild(h('div', { class: 'empty' }, h('h3', null, r.error ? 'Couldn’t analyse this block' : 'No Garmin activities in this block yet'),
+        h('p', null, r.error || 'Sync the block’s dates from Garmin (Sync this block above) to see the review.')));
       return;
     }
     var tabs = ['Summary', 'Weeks', 'Training', 'Recovery', 'Taper & readiness', 'Race'], box = h('div');
-    body.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), 'Summary', function (v) { draw(v); }, 'tabs tabs-scroll'));
-    body.appendChild(box);
+    root.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), TP.view.reviewTab || 'Summary', function (v) { TP.view.reviewTab = v; draw(v); }, 'tabs tabs-scroll'));
+    root.appendChild(box);
     function draw(t) {
       TP.clear(box);
       try { ({ Summary: summary, Weeks: weeks, Training: training, Recovery: recovery, 'Taper & readiness': taper, Race: raceTab })[t](box, r, rv); }
       catch (e) { console.error(e); box.appendChild(h('p', null, 'Couldn’t draw this tab: ' + e.message)); }
     }
-    draw('Summary');
+    draw(TP.view.reviewTab || 'Summary');
   };
 
   function bar(key, val) {

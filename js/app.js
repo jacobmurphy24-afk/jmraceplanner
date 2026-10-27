@@ -23,7 +23,7 @@
   };
 
 
-  TP.go = function (page) { TP.view.page = page; TP.closeMenu(); TP.render(); window.scrollTo(0, 0); };
+  TP.go = function (page) { TP.view.page = page; TP.view.review = null; TP.closeMenu(); TP.render(); window.scrollTo(0, 0); };
   TP.setMode = function (mode) { TP.view.page = 'calendar'; TP.view.mode = mode; TP.render(); };
   TP.closeMenu = function () { document.body.classList.remove('menu-open'); };
 

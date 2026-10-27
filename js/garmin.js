@@ -362,6 +362,7 @@
   // --- Page ---
   TP.view.gtab = TP.view.gtab || 'Overview';
   TP.renderGarmin = function (root) {
+    if (TP.view.review) { TP.blocks.page(root, TP.view.review); return; }
     root.appendChild(h('div', { class: 'page-head' }, h('h2', null, 'Analysis'),
       h('p', { class: 'muted' }, 'Your Garmin activities analysed the way a coach would: training load, fitness and fatigue, intensity, power and pace, and a review of each training block and its race.')));
     if (!G.connected()) root.appendChild(connectCard()); else root.appendChild(syncCard());
