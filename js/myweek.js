@@ -153,21 +153,23 @@
         h('div', { class: 'mw-day-h' }, h('b', null, TP.fmt(d, '%a')), h('span', { class: 'mw-dl' }, TP.fmt(d, '%d %b')), h('span', { class: 'mw-ds' }, TP.fmt(d, '%d'))));
       ds.forEach(function (s) {
         var st = hasG ? M.status(s) : null, k = st ? st.st : '';
+        if (st && st.act) return;   // done: its Garmin activity is shown in its place, below
         col.appendChild(h('div', { class: 'mchip' + (k ? ' mchip-' + k : ''), style: 'border-left-color:' + TP.typeCol(s.type), onclick: function () { TP.sessionView(s.id); } },
           M.STATUS_ICON[k] ? h('span', { class: 'mchip-tick' }, M.STATUS_ICON[k]) : null, h('span', { class: 'mchip-t' }, TP.sportLabel(s.discipline) + ' ' + s.type),
           h('span', { class: 'mchip-s' }, String(s.discipline).replace(/^(Indoor|Outdoor) /, '')), h('span', { class: 'mchip-d' }, TP.planAmount(s))));
       });
       da.forEach(function (a) {
-        var linked = M.sessionForAct(a.id);
-        col.appendChild(h('div', { class: 'achip' + (linked ? ' linked' : ''), style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a'), onclick: function () { TP.activityView(a.id); } },
-          h('span', { class: 'achip-i' }, TP.icon('activity')), h('span', { class: 'mchip-t' }, a.name || a.sport), h('span', { class: 'mchip-s' }, a.sport), h('span', { class: 'mchip-d' }, M.actAmount(a).split(' · ')[0])));
+        var linked = M.sessionObjForAct(a.id), lst = linked && M.status(linked), lk = lst ? lst.st : '';
+        col.appendChild(h('div', { class: 'achip' + (lk ? ' mchip-' + lk : ''), style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a'), onclick: function () { TP.activityView(a.id); },
+          title: linked ? (TP.match.STATUS_LABEL[lk] || 'Completed') + ': planned ' + TP.sportLabel(linked.discipline) + ' ' + linked.type + ', ' + TP.planAmount(linked) : 'Garmin activity (not in the plan)' },
+          M.STATUS_ICON[lk] ? h('span', { class: 'mchip-tick' }, M.STATUS_ICON[lk]) : h('span', { class: 'achip-i' }, TP.icon('activity')), h('span', { class: 'mchip-t' }, a.name || a.sport), h('span', { class: 'mchip-s' }, /multi_sport/.test(a.type || '') ? 'Multi' : a.sport), h('span', { class: 'mchip-d' }, M.actAmount(a).split(' · ')[0])));
       });
       if (!ds.length && !da.length) col.appendChild(h('div', { class: 'muted small mw-rest' }, d < today ? 'Rest' : '–'));
       grid.appendChild(col);
     }
     p.appendChild(grid);
     p.appendChild(h('div', { class: 'legend small', style: 'margin-top:8px' }, h('span', null, h('i', { style: 'background:#00a86b' }), 'Done'), h('span', null, h('i', { style: 'background:#e0a100' }), 'Partly done'),
-      h('span', null, h('i', { style: 'background:#ff3b30' }), 'Missed'), h('span', null, '▭ dashed: Garmin activity')));
+      h('span', null, h('i', { style: 'background:#ff3b30' }), 'Missed'), h('span', null, h('i', { style: 'background:#e4e4e4;border:1px solid #8a8a8a' }), 'Garmin activity not in the plan')));
     return p;
   }
 

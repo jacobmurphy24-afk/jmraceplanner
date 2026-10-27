@@ -100,6 +100,7 @@
 
   M.linkFor = function (sid) { return M.compute().bySession[sid] || null; };
   M.sessionForAct = function (aid) { return M.compute().byAct[aid] || null; };
+  M.sessionObjForAct = function (aid) { var sid = M.compute().byAct[aid]; return sid ? TP.state.sessions.filter(function (x) { return x.id === sid; })[0] || null : null; };
   // Activities that day not linked to a planned session (shown on the calendar in their own right).
   M.extraOn = function (d) {
     var c = M.compute(); if (!TP.garmin) return [];
