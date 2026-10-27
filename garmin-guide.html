@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Upload your Garmin history · Training Planner</title>
+  <meta name="description" content="How to download all your activities from Garmin and upload them to Training Planner.">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="doc">
+  <div class="doc-top"><a href="./" class="logo" aria-label="Training Planner">TP</a><a href="./"><b>Training Planner</b></a></div>
+
+  <h1>Upload your Garmin history</h1>
+  <p>The analysis (fitness, block reviews, race readiness) works best with several months of training behind it, ideally a year or more. Garmin lets you download everything you’ve ever recorded, then you upload that file here once. It takes a few minutes of your time, but Garmin can take a few days to prepare the file.</p>
+
+  <h2>1. Ask Garmin for your data</h2>
+  <ol class="steps">
+    <li><b>Go to Garmin’s data management page:</b> <a href="https://www.garmin.com/account/datamanagement/" target="_blank" rel="noopener">garmin.com/account/datamanagement</a>, and sign in with the account you use for Garmin Connect.<br>
+      <span class="muted">(Or, in Garmin Connect on the web: your profile picture → Account → Data Management.)</span></li>
+    <li><b>Choose “Export Your Data”</b>, then <b>“Request Data Export”</b>.</li>
+    <li><b>Wait for Garmin’s email.</b> Garmin sends a link to the email address on your account when the file is ready. This is often within a day or two, but Garmin says it can take longer if you have a lot of data. The link only works for a limited time, so download it soon after it arrives.</li>
+    <li><b>Download the ZIP file</b> from the link. Do this on a computer if you can: the file is often 1–5 GB.</li>
+  </ol>
+  <div class="note"><b>Don’t unzip it.</b> Upload the ZIP exactly as Garmin sends it. The site finds the activity files inside it (they’re in further ZIPs inside a folder called <code>DI_CONNECT</code>), so you don’t need to dig through it yourself.</div>
+
+  <h2>2. Upload it here</h2>
+  <ol class="steps">
+    <li>Sign in to Training Planner and open <b>Analysis</b>.</li>
+    <li>Choose <b>Upload history</b> (or <b>Choose your Garmin export</b> if you have no activities yet).</li>
+    <li>Pick the ZIP file, or drag it onto the box. Keep the page open while it reads: a few thousand activities can take several minutes.</li>
+    <li>When it’s done you’ll see how many activities were added. The analysis then works through them in the background.</li>
+  </ol>
+
+  <h3>What is read from the file</h3>
+  <ul>
+    <li><b>Activity files (.fit)</b>: time, distance, heart rate, power, pace, cadence, elevation, laps, swim lengths and GPS routes, second by second.</li>
+    <li><b>Activity names</b> from Garmin’s activity list, so they match what you see in Garmin Connect.</li>
+    <li><b>Sleep and resting heart rate</b> by day, used for the recovery charts.</li>
+  </ul>
+  <p>Everything else in the export (your profile, devices, settings, gear, messages and so on) is ignored. The file is read in your browser and the activities are kept on this device only. Nothing from the file is sent to this site’s servers. See the <a href="privacy.html">privacy policy</a>.</p>
+
+  <h2>Questions</h2>
+  <h3>Can I upload just a few activities?</h3>
+  <p>Yes. In Garmin Connect on the web, open an activity, choose the gear icon (⚙) and then <b>Export File</b> (or <b>Export Original</b>). That downloads a .fit file (sometimes inside a small .zip). Upload either here; you can choose several at once.</p>
+  <h3>What if I upload the same thing twice?</h3>
+  <p>Nothing is duplicated. Activities already on this device are recognised and skipped, so you can upload a newer export later to fill a gap.</p>
+  <h3>I use more than one device</h3>
+  <p>Your activities stay on the device you uploaded them on, so upload on each device you use for Analysis. Your plans, links between sessions and activities, and block reviews are saved to your account and appear everywhere.</p>
+  <h3>What about new activities?</h3>
+  <p>Upload new .fit files, or a fresh export, whenever you like. Automatic syncing of new activities straight from Garmin is coming.</p>
+  <h3>It says no activity files were found</h3>
+  <p>Check you uploaded the ZIP from Garmin’s data export (not a single unrelated file) and that the download finished. If your browser unzipped it automatically (Safari can), zip the <code>DI_CONNECT</code> folder again or upload the <code>UploadedFiles…zip</code> files inside <code>DI_CONNECT/DI-Connect-Uploaded-Files</code> directly.</p>
+</main>
+</body>
+</html>

@@ -110,6 +110,7 @@
       TP.field('Email', email),
       mode !== 'reset' ? TP.field('Password', TP.revealable(pass)) : null,
       mode === 'signup' ? h('p', { class: 'hint' }, 'At least 6 characters.') : null,
+      mode === 'signup' ? h('p', { class: 'hint' }, 'By creating an account you agree to how your data is used, as set out in the ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'privacy policy'), '.') : null,
       go);
     card.appendChild(h('h1', { class: 'gate-title' }, title));
     card.appendChild(h('p', { class: 'gate-sub' }, mode === 'reset' ? 'We’ll email you a link to choose a new password.' : 'Plan your race calendar and training blocks, share plans with the people you train with, and connect Garmin.'));
@@ -117,7 +118,8 @@
     var link = function (label, m) { return h('a', { href: '#', class: 'gate-link', onclick: function (e) { e.preventDefault(); redraw(m); } }, label); };
     card.appendChild(h('div', { class: 'gate-links' },
       mode === 'signin' ? [link('Create an account', 'signup'), link('Forgot password?', 'reset')]
-      : mode === 'signup' ? link('Already have an account? Sign in', 'signin') : link('Back to sign in', 'signin')));
+      : mode === 'signup' ? link('Already have an account? Sign in', 'signin') : link('Back to sign in', 'signin'),
+      h('a', { href: 'privacy.html', class: 'gate-link', target: '_blank', rel: 'noopener' }, 'Privacy')));
   }
 
   // First sign-in: start a plan (optionally from one saved on this device before accounts), or join one you were invited to.

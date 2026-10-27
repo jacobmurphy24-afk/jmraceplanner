@@ -175,9 +175,9 @@
     return Promise.reject(new Error('No FIT file inside the download.'));
   }
   // FIT -> compact second-by-second streams (seconds from start) plus the legs of multisport files.
-  function parseFit(id, bytes) {
-    var dec = new FIT.Decoder(FIT.Stream.fromByteArray(Array.from(bytes)));
-    var res = dec.read({ convertDateTimesToDates: true }), m = res.messages, rec = m.recordMesgs || [];
+  function parseFit(id, bytes, m) {
+    if (!m) m = new FIT.Decoder(FIT.Stream.fromByteArray(Array.from(bytes))).read({ convertDateTimesToDates: true }).messages;
+    var rec = m.recordMesgs || [];
     if (!rec.length) return null;
     var t0 = rec[0].timestamp.getTime(), col = { t: [], hr: [], power: [], speed: [], cadence: [], distance: [], altitude: [] }, route = [];
     var SEMI = 180 / Math.pow(2, 31), rel = function (d) { return d ? Math.round((d.getTime() - t0) / 1000) : null; };
@@ -337,6 +337,8 @@
         .then(function () { return G.prepare(); }).then(function () { return G.frecs[id] ? null : G.prepare(); }).then(function () { return st; });
     });
   };
+  // For the history upload (import.js).
+  G.internals = { parseFit: parseFit, putAll: putAll, getAll: getAll, addRange: addRange, disciplineFor: disciplineFor, FIT_VERSION: FIT_VERSION };
   G.needsRefetch = function (a) { return a && a.fit && (a.fitv || 1) < FIT_VERSION; };
   // The first date with Garmin data on this device (the load model needs ~6 weeks before a block).
   G.historyStart = function () {
@@ -393,8 +395,12 @@
     if (TP.view.review) { TP.blocks.page(root, TP.view.review); return; }
     root.appendChild(h('div', { class: 'page-head page-head-row' }, h('h2', null, 'Analysis'), TP.glossaryButton()));
     // First time: the full instructions. After that, one line to sync (or reconnect).
-    if (!G.connected() && !G.acts.length) root.appendChild(connectCard());
-    else root.appendChild(syncBar());
+    if (!G.connected() && !G.acts.length) {
+      root.appendChild(G.importCard());
+      root.appendChild(h('div', { class: 'sync-bar' }, h('span', { class: 'small grow muted' }, 'Have a Garmin personal API key? Connect it to sync new activities automatically.'),
+        h('button', { class: 'btn btn-sm', onclick: function () { showConnect = !showConnect; TP.changed(); } }, showConnect ? 'Hide' : 'Connect with API key')));
+      if (showConnect) root.appendChild(connectCard());
+    } else root.appendChild(syncBar());
     if (G.prep) root.appendChild(h('div', { class: 'panel prep' }, h('div', { class: 'spinner' }), h('span', { id: 'g-prep' }, 'Analysing activities: ' + G.prep.done + ' of ' + G.prep.total + '…')));
     var tabs = ['Overview', 'Block reviews'], body = h('div');
     if (tabs.indexOf(TP.view.gtab) < 0) TP.view.gtab = 'Overview';
@@ -413,8 +419,26 @@
   };
   // The last date synced, and a one-press sync that picks up from there.
   G.lastSynced = function () { var r = readLS(RANGES, null) || initialRanges(); return r.length ? r[r.length - 1][1] : null; };
-  var showOptions = false, showConnect = false;
-  // The one-line sync bar, also on My Week (new users get a link to the connection instructions instead).
+  // Sync from a few days before the last sync (a new device: the last six months).
+  G.quickSync = function () {
+    var last = G.lastSynced(), today = TP.today();
+    var from = last ? (TP.addDays(last, -3) < TP.addDays(today, -365) ? TP.addDays(today, -365) : TP.addDays(last, -3)) : TP.addDays(today, -182);
+    return G.sync(from, today, true);
+  };
+  // Home page: one button, outlined green when Garmin is connected and red when it isn't. Connected,
+  // it syncs; otherwise it opens Analysis, where Garmin data is uploaded or connected.
+  G.statusButton = function () {
+    var on = G.connected(), last = G.lastSynced();
+    var b = h('button', { class: 'btn btn-sm g-status ' + (on ? 'g-on' : 'g-off'), disabled: !!G.syncing,
+      title: on ? 'Garmin connected' + (last ? ', synced to ' + TP.fmt(last, '%d %b') : '') + '. Press to sync.' : 'Garmin not connected. Press to upload your Garmin data or connect.',
+      onclick: function () { if (on) G.quickSync(); else TP.go('garmin'); } },
+      h('i', { class: 'g-dot' }), G.syncing ? 'Syncing…' : 'Garmin');
+    return h('div', { class: 'g-status-wrap' }, b, G.progress ? h('div', { class: 'g-status-msg' }, G.progress) : null);
+  };
+  var showOptions = false, showConnect = false, showImport = false;
+  function importBtn() { return h('button', { class: 'btn btn-sm', onclick: function () { showImport = !showImport; TP.changed(); } }, TP.icon('upload'), showImport ? 'Hide upload' : 'Upload history'); }
+  function withImport(wrap) { if (showImport || G.importing()) wrap.appendChild(G.importCard()); return wrap; }
+  // The one-line sync bar (new users get a link to the connection instructions instead).
   G.syncBar = function () {
     if (!G.connected() && !G.acts.length) return h('div', { class: 'sync-bar' }, h('span', { class: 'small grow' }, h('b', null, 'Connect Garmin'), h('span', { class: 'muted' }, ' to see your training, fitness and health here.')),
       h('button', { class: 'btn btn-sm btn-primary', onclick: function () { TP.go('garmin'); } }, 'Connect'));
@@ -423,19 +447,18 @@
   function syncBar() {
     var last = G.lastSynced(), today = TP.today();
     if (!G.connected()) {
-      var bar0 = h('div', { class: 'sync-bar' }, h('span', { class: 'muted small grow' }, 'Garmin isn’t connected on this device · ' + G.acts.length + ' activities stored here'),
+      var bar0 = h('div', { class: 'sync-bar' }, h('span', { class: 'muted small grow' }, G.acts.length + ' Garmin activities stored on this device'), importBtn(),
         h('button', { class: 'btn btn-sm', onclick: function () { showConnect = !showConnect; TP.changed(); } }, showConnect ? 'Hide' : 'Connect Garmin'));
-      return showConnect ? h('div', null, bar0, connectCard()) : bar0;
+      return withImport(showConnect ? h('div', null, bar0, connectCard()) : h('div', null, bar0));
     }
-    var from = last ? (TP.addDays(last, -3) < TP.addDays(today, -365) ? TP.addDays(today, -365) : TP.addDays(last, -3)) : TP.addDays(today, -182);
-    var quick = h('button', { class: 'btn btn-sm btn-primary', disabled: !!G.syncing, onclick: function () { G.sync(from, today, true); } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync');
+    var quick = h('button', { class: 'btn btn-sm btn-primary', disabled: !!G.syncing, onclick: G.quickSync }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync');
     var bar = h('div', { class: 'sync-bar' },
       h('span', { class: 'small grow' }, h('b', null, 'Garmin connected'), h('span', { class: 'muted' }, ' · ' + G.acts.length + ' activities' + (last ? ' · synced to ' + TP.fmt(last, '%d %b') : ''))),
-      quick, h('button', { class: 'btn btn-sm', onclick: function () { showOptions = !showOptions; TP.changed(); } }, showOptions ? 'Hide options' : 'Options'));
+      quick, importBtn(), h('button', { class: 'btn btn-sm', onclick: function () { showOptions = !showOptions; TP.changed(); } }, showOptions ? 'Hide options' : 'Options'));
     var wrap = h('div', null, bar);
     if (G.progress) wrap.appendChild(h('div', { class: 'sync-progress' }, G.progress));
     if (showOptions) wrap.appendChild(syncCard());
-    return wrap;
+    return withImport(wrap);
   }
 
   function connectCard() {

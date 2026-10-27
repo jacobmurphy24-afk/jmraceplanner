@@ -49,6 +49,7 @@
           TP.garmin && TP.garmin.acts.length ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
             TP.confirm('Delete the ' + TP.garmin.acts.length + ' Garmin activities and sleep data stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { TP.garmin.clearActs(); m.close(); });
           } }, TP.icon('trash'), 'Clear stored Garmin activities') : null),
+        h('p', { class: 'hint' }, 'Garmin activities are kept only on this device. ', h('a', { href: 'garmin-guide.html', target: '_blank', rel: 'noopener' }, 'How to upload your Garmin history'), ' · ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy')),
         h('div', { class: 'form-section' }, 'Start again'),
         h('p', { class: 'small' }, 'Your plan is saved automatically in this browser. Use Save plan first if you want a copy.'),
         h('button', { class: 'btn btn-outline-danger', onclick: function () {
@@ -93,7 +94,14 @@
     document.getElementById('plan-file').addEventListener('change', readPlanFile);
     document.getElementById('top-plan').addEventListener('click', function () { TP.plansPanel(); });
     document.querySelectorAll('[data-action=add-event]').forEach(function (b) { b.addEventListener('click', function () { TP.closeMenu(); TP.eventForm(null, TP.view.selected); }); });
-    document.querySelectorAll('[data-action=add-session]').forEach(function (b) { b.addEventListener('click', function () { TP.closeMenu(); TP.sessionForm(null, { date: TP.view.selected }); }); });
+    // The + in the phone tab bar: a session or an event on the selected date.
+    document.querySelectorAll('[data-action=add-session]').forEach(function (b) { b.addEventListener('click', function () {
+      TP.closeMenu();
+      var d = TP.view.selected, m = TP.modal({ size: 'm', cls: 'add-sheet', title: h('div', null, h('div', { class: 'md-t' }, 'Add'), h('div', { class: 'md-sub' }, TP.fmt(d, '%A %d %B %Y'))),
+        body: h('div', { class: 'add-choices' },
+          h('button', { class: 'btn btn-primary', onclick: function () { m.close(); TP.sessionForm(null, { date: d }); } }, TP.icon('plus'), 'Session'),
+          h('button', { class: 'btn', onclick: function () { m.close(); TP.eventForm(null, d); } }, TP.icon('plus'), 'Event (race or training block)')) });
+    }); });
     // Phones open on the month view; the year view is easier to read on a wide screen.
     if (window.matchMedia('(max-width: 760px)').matches) TP.view.mode = 'Month';
     TP.onChange(TP.render);

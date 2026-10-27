@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy policy · Training Planner</title>
+  <meta name="description" content="How Training Planner (jmraceplanner.co.uk) uses and protects your data.">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="doc">
+  <div class="doc-top"><a href="./" class="logo" aria-label="Training Planner">TP</a><a href="./"><b>Training Planner</b></a></div>
+
+  <h1>Privacy policy</h1>
+  <p class="updated">Last updated 27 October 2026</p>
+  <p>Training Planner (<a href="https://jmraceplanner.co.uk">jmraceplanner.co.uk</a>) helps you plan races and training and analyse the activities you record on Garmin devices. This policy explains what data the site uses, where it is kept, who else handles it and what your rights are. It’s written to be read: if anything is unclear, get in touch.</p>
+
+  <h2>Who we are</h2>
+  <p>The site is run by <span class="todo">[YOUR NAME]</span>, an individual based in the United Kingdom, who is the data controller for the personal data described here. Contact: <span class="todo">[CONTACT EMAIL]</span>.</p>
+  <p>The site is free. It has no adverts, no analytics or tracking scripts, and your data is never sold or used for marketing.</p>
+
+  <h2>The short version</h2>
+  <ul>
+    <li><b>Your Garmin activities and health data stay on your device.</b> Activity files, routes, heart rate, sleep and similar data are stored in your browser on the device you uploaded or synced them on. They are not stored on our servers.</li>
+    <li><b>Your account and plans are stored with Google Firebase</b> in London (europe-west2), so you can sign in on any device and share plans.</li>
+    <li><b>You can ask for a copy of your data or for it to be deleted at any time.</b></li>
+  </ul>
+
+  <h2>What we collect and why</h2>
+  <table>
+    <tr><th>Data</th><th>Where it’s kept</th><th>Why</th></tr>
+    <tr><td><b>Account</b>: your name, email address, a password (stored only as a secure hash by Google), and whether your email is verified</td>
+        <td>Google Firebase Authentication</td><td>To let you sign in and to identify you to people you share plans with</td></tr>
+    <tr><td><b>Plans</b>: race calendars, events, planned sessions, training blocks, notes, and the names, emails and roles of people a plan is shared with or who are invited to it</td>
+        <td>Google Cloud Firestore, London (europe-west2)</td><td>To provide the planner and plan sharing</td></tr>
+    <tr><td><b>Analysis settings and results</b>: which activity is linked to which planned session, saved block reviews (summaries such as training load and fitness scores), and your training thresholds (e.g. threshold heart rate, power and pace)</td>
+        <td>Google Cloud Firestore, London, readable only by your account</td><td>So your links, reviews and settings are the same on every device</td></tr>
+    <tr><td><b>Garmin activities and wellness data</b>: activity summaries and second-by-second data (heart rate, power, pace, cadence, elevation, GPS route, laps), sleep, resting heart rate and heart-rate variability</td>
+        <td>Only in your browser’s storage (IndexedDB) on the device that uploaded or synced them</td><td>To show and analyse your training</td></tr>
+    <tr><td><b>Garmin personal API key</b> (only if you choose to connect one)</td>
+        <td>Only in your browser’s storage on that device</td><td>To fetch your activities from Garmin</td></tr>
+    <tr><td><b>Invitation emails</b>: the invitee’s email address, the plan name and your name</td>
+        <td>Sent through Resend; a count per sender and per address is kept for 2 days to stop abuse</td><td>To email people you invite to a plan</td></tr>
+    <tr><td><b>Technical data</b>: IP address, browser type and time of requests</td>
+        <td>Logged briefly by our hosting providers (see below)</td><td>To deliver the site and keep it secure</td></tr>
+  </table>
+
+  <h3>Health data</h3>
+  <p>Heart rate, sleep, heart-rate variability and training data count as health data under UK data protection law, which needs extra care. We use it only to give you the analysis you ask for, with your explicit consent, which you give when you upload a Garmin export or connect Garmin. Most of it never leaves your device. The parts saved to your account (thresholds and block review summaries) are visible only to you. You can withdraw consent at any time by clearing your Garmin data (Settings → Garmin analysis → Clear stored Garmin activities) and asking us to delete your account.</p>
+
+  <h3>Legal basis</h3>
+  <ul>
+    <li><b>Contract</b>: to provide the service you sign up for (your account, plans and sharing).</li>
+    <li><b>Explicit consent</b>: for health data, as above.</li>
+    <li><b>Legitimate interests</b>: to keep the site secure and prevent abuse (for example, limiting how many invitation emails can be sent).</li>
+  </ul>
+
+  <h2>Uploading your Garmin export</h2>
+  <p>When you upload the ZIP from Garmin’s “Export your data”, it is opened and read entirely in your browser. Only activity files, activity names, and daily sleep and resting heart rate are read; everything else in the export (profile, devices, gear, settings and so on) is ignored. Nothing from the file is sent to our servers.</p>
+
+  <h2>Connecting Garmin</h2>
+  <p>If you connect a Garmin personal API key, requests to Garmin pass through a small relay we run on Cloudflare Workers (<code>garmin.jmraceplanner.co.uk</code>), because Garmin doesn’t accept requests directly from web pages. The relay only forwards requests to a fixed list of read-only Garmin addresses and passes the response back. It does not store your key or your data. Garmin’s own handling of your data is covered by <a href="https://www.garmin.com/en-GB/privacy/connect/" target="_blank" rel="noopener">Garmin’s privacy notice</a>.</p>
+  <p>If we later offer a direct connection through the Garmin Connect Developer Program, this policy will be updated before it is switched on, explaining what is stored and where.</p>
+
+  <h2>Who else handles your data</h2>
+  <table>
+    <tr><th>Provider</th><th>What for</th><th>Location</th></tr>
+    <tr><td>Google (Firebase Authentication, Cloud Firestore)</td><td>Accounts, plans, analysis settings and reviews</td><td>Firestore data in London; authentication may be processed by Google in the US</td></tr>
+    <tr><td>GitHub (GitHub Pages)</td><td>Hosting the website’s files</td><td>US</td></tr>
+    <tr><td>Cloudflare</td><td>Domain name service, the Garmin relay and invitation service, and the cdnjs library server that delivers the map code</td><td>Global network</td></tr>
+    <tr><td>Resend</td><td>Sending invitation emails</td><td>US</td></tr>
+    <tr><td>OpenStreetMap Foundation</td><td>Map tiles for activity routes (your browser requests tiles for the area of the route)</td><td>UK / EU</td></tr>
+    <tr><td>Garmin</td><td>Only if you connect a Garmin API key: the source of your activities</td><td>US / EU</td></tr>
+  </table>
+  <p>Where data is processed outside the UK, these providers rely on the UK’s adequacy regulations (including the UK Extension to the EU–US Data Privacy Framework) or the UK International Data Transfer Addendum to the EU standard contractual clauses.</p>
+
+  <h2>Storage on your device</h2>
+  <p>The site uses your browser’s storage to keep you signed in (Firebase), to store your Garmin data and API key if you add them, to remember small preferences, and to work offline (a service worker keeps a copy of the site’s files). There are no advertising or tracking cookies, so there is no cookie banner. Signing out doesn’t delete Garmin data stored on the device; use Settings → Garmin analysis → Clear stored Garmin activities, or clear the site’s data in your browser.</p>
+
+  <h2>How long we keep it</h2>
+  <ul>
+    <li>Account, plans, analysis settings and reviews: until you delete them or ask us to delete your account.</li>
+    <li>Shared plans: a plan you own is deleted with your account; your name and email are removed from other people’s plans.</li>
+    <li>Invitation counts: 2 days.</li>
+    <li>Hosting providers’ technical logs: according to their own policies, typically a few days to a few weeks.</li>
+    <li>Data on your device: until you clear it.</li>
+  </ul>
+
+  <h2>Your rights</h2>
+  <p>Under UK data protection law you can ask to access your data, correct it, delete it, restrict or object to how it’s used, and receive a copy in a portable format. You can withdraw consent at any time. To do any of these, email <span class="todo">[CONTACT EMAIL]</span>; we’ll reply within one month. You can export your plans yourself at any time with <b>Save plan</b>.</p>
+  <p>If you’re unhappy with how your data is handled, you can complain to the Information Commissioner’s Office (<a href="https://ico.org.uk/make-a-complaint/" target="_blank" rel="noopener">ico.org.uk</a>, 0303 123 1113), though we’d appreciate the chance to sort it out first.</p>
+
+  <h2>Security</h2>
+  <p>All connections use HTTPS. Access rules on the database let only you read your own analysis data, and only a plan’s members read that plan. Passwords are handled by Google and never seen by us.</p>
+
+  <h2>Children</h2>
+  <p>The site is not intended for children under 13 and we don’t knowingly collect their data.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the date at the top will change. Significant changes will be shown in the app.</p>
+</main>
+</body>
+</html>

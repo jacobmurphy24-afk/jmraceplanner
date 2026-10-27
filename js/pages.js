@@ -11,7 +11,7 @@
     var st = TP.view.stack, top = st[st.length - 1];
     if (top) return top.title;
     if (TP.view.page === 'garmin' && TP.view.review) return TP.view.review.name;
-    return { myweek: 'My Week', calendar: 'Calendar', reports: 'Block reports', garmin: 'Analysis' }[TP.view.page] || 'Back';
+    return { myweek: 'Home', calendar: 'Calendar', reports: 'Block reports', garmin: 'Analysis' }[TP.view.page] || 'Back';
   }
   // p: { kind: 'activity' | 'sport', title, ... }
   TP.openPage = function (p) {

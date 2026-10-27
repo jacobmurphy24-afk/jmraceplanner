@@ -235,9 +235,14 @@
       var indoor = /indoor|virtual|treadmill|lap_swimming|pool|strength|trainer/.test(String(a.type || '')) ;
       if (!indoor && G.needsRefetch(a)) {
         box.appendChild(h('div', null, section('Route')));
-        var msg = h('p', { class: 'muted small' }, G.connected() ? 'Loading the route from Garmin…' : 'Connect Garmin and sync to see the route.');
+        var msg = h('p', { class: 'muted small' }, G.connected() ? 'Loading the route from Garmin…' : 'Connect Garmin and sync, or upload this activity’s FIT file in Analysis → Upload history, to see the route.');
         box.appendChild(msg);
-        if (G.connected()) G.refetch(a.id).then(function () { TP.render(); }).catch(function (e) { msg.textContent = 'The route couldn’t be loaded: ' + e.message; });
+        if (G.connected()) G.refetch(a.id).then(function () { TP.render(); }).catch(function (e) {
+          // "Load failed" (Safari) / "Failed to fetch" (Chrome): the relay couldn't be reached at all.
+          msg.textContent = /load failed|failed to fetch|networkerror/i.test(e.message)
+            ? 'The route couldn’t be loaded: this device couldn’t reach Garmin through the site’s relay (garmin.jmraceplanner.co.uk). Some work, school and public networks block it, so try mobile data or another Wi-Fi. You can also upload the activity’s FIT file in Analysis → Upload history.'
+            : 'The route couldn’t be loaded: ' + e.message;
+        });
       }
       return;
     }

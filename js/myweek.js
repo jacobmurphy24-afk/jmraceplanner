@@ -1,4 +1,4 @@
-// My Week: one page with the week at a glance - the current training block and how it's going, the
+// Home: one page with the week at a glance - the current training block and how it's going, the
 // countdown to the next race, the week's plan against what's been done, and fitness and health.
 (function (TP) {
   var h = TP.h, A = TP.TA, C = TP.chart, fin = A.fin, sp = A.sprintf;
@@ -8,10 +8,9 @@
   function kpi(v, l, s, col) { return h('div', { class: 'kpi', style: col ? 'border-left-color:' + col : null }, h('div', { class: 'kpi-v', style: col ? 'color:' + col : null }, v), h('div', { class: 'kpi-l' }, l), s ? h('div', { class: 'kpi-s' }, s) : null); }
   function sportOf(s) { var sp2 = TP.sportOf(s.discipline); return ['Swim', 'Bike', 'Run'].indexOf(sp2) >= 0 ? sp2 : 'Other'; }
 
-  // The page: My Week is the site's home page.
+  // The page: the site's home page.
   MW.page = function (root) {
-    root.appendChild(h('div', { class: 'page-head page-head-row' }, h('h2', null, 'My Week'), TP.glossaryButton()));
-    root.appendChild(TP.garmin.syncBar());
+    root.appendChild(h('div', { class: 'page-head page-head-row mw-head-row' }, h('h2', { class: 'grow' }, 'Home'), TP.garmin.statusButton()));
     if (TP.garmin.prep) root.appendChild(h('div', { class: 'panel prep' }, h('div', { class: 'spinner' }), h('span', { id: 'g-prep' }, 'Analysing activities: ' + TP.garmin.prep.done + ' of ' + TP.garmin.prep.total + '…')));
     MW.render(root);
   };
@@ -151,16 +150,17 @@
     for (var i = 0; i < 7; i++) {
       var d = TP.addDays(ws, i), ds = planned.filter(function (s) { return s.date === d; }), da = hasG ? TP.garmin.acts.filter(function (a) { return a.date === d; }) : [];
       var col = h('div', { class: 'mw-day' + (d === today ? ' today' : '') + (d < today ? ' past' : '') },
-        h('div', { class: 'mw-day-h' }, h('b', null, TP.fmt(d, '%a')), h('span', null, TP.fmt(d, '%d %b'))));
+        h('div', { class: 'mw-day-h' }, h('b', null, TP.fmt(d, '%a')), h('span', { class: 'mw-dl' }, TP.fmt(d, '%d %b')), h('span', { class: 'mw-ds' }, TP.fmt(d, '%d'))));
       ds.forEach(function (s) {
         var st = hasG ? M.status(s) : null, k = st ? st.st : '';
         col.appendChild(h('div', { class: 'mchip' + (k ? ' mchip-' + k : ''), style: 'border-left-color:' + TP.typeCol(s.type), onclick: function () { TP.sessionView(s.id); } },
-          M.STATUS_ICON[k] ? h('span', { class: 'mchip-tick' }, M.STATUS_ICON[k]) : null, h('span', { class: 'mchip-t' }, TP.sportLabel(s.discipline) + ' ' + s.type), h('span', { class: 'mchip-d' }, TP.planAmount(s))));
+          M.STATUS_ICON[k] ? h('span', { class: 'mchip-tick' }, M.STATUS_ICON[k]) : null, h('span', { class: 'mchip-t' }, TP.sportLabel(s.discipline) + ' ' + s.type),
+          h('span', { class: 'mchip-s' }, String(s.discipline).replace(/^(Indoor|Outdoor) /, '')), h('span', { class: 'mchip-d' }, TP.planAmount(s))));
       });
       da.forEach(function (a) {
         var linked = M.sessionForAct(a.id);
         col.appendChild(h('div', { class: 'achip' + (linked ? ' linked' : ''), style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a'), onclick: function () { TP.activityView(a.id); } },
-          h('span', { class: 'achip-i' }, TP.icon('activity')), h('span', { class: 'mchip-t' }, a.name || a.sport), h('span', { class: 'mchip-d' }, M.actAmount(a).split(' · ')[0])));
+          h('span', { class: 'achip-i' }, TP.icon('activity')), h('span', { class: 'mchip-t' }, a.name || a.sport), h('span', { class: 'mchip-s' }, a.sport), h('span', { class: 'mchip-d' }, M.actAmount(a).split(' · ')[0])));
       });
       if (!ds.length && !da.length) col.appendChild(h('div', { class: 'muted small mw-rest' }, d < today ? 'Rest' : '–'));
       grid.appendChild(col);

@@ -29,6 +29,7 @@
       <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></g></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M16 8V4H4v12h4"/></g></symbol>
       <symbol id="i-paste" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="5" width="14" height="16" rx="1"/><path d="M9 3h6v4H9zM9 13l2 2 4-4"/></g></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></g></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></g></symbol>
       <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h6l2 2h10v12H3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
       <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
@@ -47,7 +48,7 @@
       <div id="side-account"></div>
       <div class="side-section">Workspace</div>
       <nav class="nav">
-        <button data-page="myweek"><svg class="ic"><use href="#i-home"/></svg>My Week</button>
+        <button data-page="myweek"><svg class="ic"><use href="#i-home"/></svg>Home</button>
         <button data-page="calendar"><svg class="ic"><use href="#i-calendar"/></svg>Calendar</button>
         <button data-page="reports"><svg class="ic"><use href="#i-chart"/></svg>Block reports</button>
         <button data-page="garmin"><svg class="ic"><use href="#i-activity"/></svg>Analysis</button>
@@ -80,7 +81,7 @@
 
     <!-- Phone tab bar -->
     <nav class="tabbar">
-      <button data-page="myweek"><svg class="ic"><use href="#i-home"/></svg><span>My Week</span></button>
+      <button data-page="myweek"><svg class="ic"><use href="#i-home"/></svg><span>Home</span></button>
       <button data-page="calendar"><svg class="ic"><use href="#i-calendar"/></svg><span>Calendar</span></button>
       <button data-action="add-session" class="tab-add" aria-label="Add session"><svg class="ic"><use href="#i-plus"/></svg></button>
       <button data-page="reports"><svg class="ic"><use href="#i-chart"/></svg><span>Reports</span></button>
@@ -107,6 +108,7 @@
   <script src="js/account.js"></script>
   <script src="js/match.js"></script>
   <script src="js/garmin.js"></script>
+  <script src="js/import.js"></script>
   <script src="js/pages.js"></script>
   <script src="js/activity.js"></script>
   <script src="js/coach.js"></script>

@@ -82,7 +82,13 @@
   };
 
   function navBar(label, prev, next) {
-    return h('div', { class: 'cal-nav' },
+    // The selected date (dd/mm/yyyy); pressing it opens a date picker to jump to any day.
+    var pick = h('input', { type: 'date', class: 'cal-pick', value: TP.view.selected, tabindex: -1, 'aria-hidden': 'true',
+      onchange: function () { if (pick.value) TP.select(pick.value); } });
+    var sel = h('button', { class: 'btn btn-sm cal-sel', title: 'Selected date: choose another', onclick: function () {
+      try { pick.showPicker(); } catch (e) { pick.focus(); pick.click(); }
+    } }, TP.fmt(TP.view.selected, '%d/%m/%Y'), pick);
+    return h('div', { class: 'cal-nav' }, sel,
       h('button', { class: 'btn btn-icon', 'aria-label': 'Previous', onclick: prev }, TP.icon('chev-l')),
       h('h2', null, label),
       h('button', { class: 'btn btn-icon', 'aria-label': 'Next', onclick: next }, TP.icon('chev-r')),
@@ -147,48 +153,35 @@
       return h('div', { class: 'mv-blk', style: bg },
         h('div', { class: 'mv-blk-t' + (e.kind === 'race' ? ' mv-blk-race' : ''), onclick: stop(click) }, label), inner);
     }), ds.filter(function (s) { return !shown[s.id]; }).map(chip), TP.match.extraOn(d).map(achip));
-    // Phones: coloured bars and session dots instead of labels.
+    // Phones: coloured block bars and a short line per session or activity ("Run 10k").
     var compact = h('div', { class: 'mv-compact' },
       h('div', { class: 'mv-cbars' }, ov.filter(function (e) { return e.kind !== 'race'; }).map(function (e) {
         return h('i', { class: e.kind === 'recov' ? 'recov' : '', style: 'background:' + TP.deep(e.col) });
       })),
-      h('div', { class: 'mv-cdots' }, ds.slice(0, 4).map(function (s) { var st = TP.match.status(s); return h('i', { class: st ? 'st-' + st.st : '', style: 'background:' + TP.typeCol(s.type) }); }),
-        TP.match.extraOn(d).slice(0, 2).map(function () { return h('i', { class: 'act' }); })));
+      h('div', { class: 'mv-ctext' }, ds.slice(0, 3).map(function (s) {
+        var st = TP.match.status(s), k = st ? st.st : '';
+        return h('span', { class: 'mv-ct' + (k ? ' mchip-' + k : ''), style: 'border-left-color:' + TP.typeCol(s.type) }, short(TP.sportOf(s.discipline), TP.planAmount(s)));
+      }), TP.match.extraOn(d).slice(0, Math.max(0, 3 - ds.length)).map(function (a) {
+        return h('span', { class: 'mv-ct mv-ca', style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a') }, short(a.sport, TP.match.actAmount(a).split(' · ')[0]));
+      }), ds.length + TP.match.extraOn(d).length > 3 ? h('span', { class: 'mv-cmore' }, '+' + (ds.length + TP.match.extraOn(d).length - 3)) : null));
     return h('div', { class: 'mv-day' + (d === TP.today() ? ' mv-today' : '') + (d === TP.view.selected ? ' mv-sel' : ''), onclick: function () { TP.select(d); } },
       h('div', { class: 'mv-numrow' }, num), full, compact);
   }
 
-  // --- Selected day: its sessions, events, copy & paste ---
+  function short(sport, amt) {
+    return (sport === 'Other' ? '' : sport) + ' ' + String(amt || '').replace(/\s*km\b/, 'k').replace(/\s*mi\b/, 'mi').replace(/\s*min\b/, "'").replace(/\s*m\b/, 'm');
+  }
+
+  // --- Selected day: copy & paste, then everything on it ---
   TP.renderDay = function (root) {
     var d = TP.view.selected, wk = TP.weekStart(d), ds = TP.sessionsOn(d), nWk = TP.sessionsBetween(wk, TP.addDays(wk, 6)).length;
     var evIds = []; TP.entriesOn(TP.schedule(), d).forEach(function (e) { if (evIds.indexOf(e.bid) < 0) evIds.push(e.bid); });
+    // On a phone the date is in the calendar's top bar and the + in the tab bar adds sessions and events.
     root.appendChild(h('div', { class: 'day-head' },
       h('div', null, h('div', { class: 'lbl' }, 'Selected date'), h('div', { class: 'day-date' }, TP.fmt(d, '%a %d %b %Y'))),
       h('div', { class: 'day-add needs-edit' },
         h('button', { class: 'btn btn-primary btn-sm', onclick: function () { TP.eventForm(null, d); } }, TP.icon('plus'), 'Event'),
         h('button', { class: 'btn btn-soft btn-sm', onclick: function () { TP.sessionForm(null, { date: d }); } }, TP.icon('plus'), 'Session'))));
-    if (ds.length) {
-      root.appendChild(h('div', { class: 'side-section' }, 'Sessions on this day'));
-      ds.forEach(function (s) {
-        var st = TP.match.status(s), k = st ? st.st : '';
-        root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.sessionView(s.id); } },
-          h('span', { class: 'dot', style: 'background:' + TP.typeCol(s.type) }),
-          h('span', { class: 'grow' }, TP.sportLabel(s.discipline) + ' · ' + s.type),
-          TP.match.STATUS_ICON[k] ? h('span', { class: 'st-tick st-' + k, title: TP.match.STATUS_LABEL[k] }, TP.match.STATUS_ICON[k]) : null,
-          h('span', { class: 'muted' }, TP.planAmount(s))));
-      });
-    }
-    var dayActs = TP.garmin ? TP.garmin.acts.filter(function (a) { return a.date === d; }) : [];
-    if (dayActs.length) {
-      root.appendChild(h('div', { class: 'side-section' }, 'Garmin activities'));
-      dayActs.forEach(function (a) {
-        var linked = TP.match.sessionForAct(a.id);
-        root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.activityView(a.id); } },
-          h('span', { class: 'dot', style: 'background:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a') }),
-          h('span', { class: 'grow' }, a.name || a.type), linked ? h('span', { class: 'st-tick st-done', title: 'Completes a planned session' }, '✓') : null,
-          h('span', { class: 'muted' }, TP.match.actAmount(a))));
-      });
-    }
     if (ds.length || nWk || TP.clip.day || TP.clip.week) {
       root.appendChild(h('div', { class: 'side-section' }, 'Copy & paste'));
       var b = function (on, icon, label, fn) { return on ? h('button', { class: 'btn btn-soft btn-sm', onclick: fn }, TP.icon(icon), label) : null; };
@@ -211,17 +204,33 @@
         if (TP.clip.week) root.appendChild(h('div', { class: 'hint' }, 'Pasting a week replaces the sessions already in the selected week.'));
       }
     }
-    if (evIds.length) {
-      root.appendChild(h('div', { class: 'side-section' }, 'Events on this date'));
-      evIds.forEach(function (id) {
-        var p = TP.state.events[id]; if (!p) return;
-        root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.eventForm(id); } },
-          h('span', { class: 'dot', style: 'background:' + p.palette.race }),
-          h('span', { class: 'grow strong' }, TP.eventName(p)),
-          p.race_type !== 'Training Only' ? h('span', { class: 'prio-mini' }, 'P' + p.priority) : null,
-          TP.icon('pencil')));
-      });
-    }
+    // Events, sessions and Garmin activities on the day, in one list.
+    var dayActs = TP.garmin ? TP.garmin.acts.filter(function (a) { return a.date === d; }) : [];
+    root.appendChild(h('div', { class: 'side-section' }, 'On ' + TP.fmt(d, '%a %d %b')));
+    if (!evIds.length && !ds.length && !dayActs.length) root.appendChild(h('div', { class: 'muted small day-none' }, 'Nothing planned.'));
+    evIds.forEach(function (id) {
+      var p = TP.state.events[id]; if (!p) return;
+      root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.eventForm(id); } },
+        h('span', { class: 'dot', style: 'background:' + p.palette.race }),
+        h('span', { class: 'grow strong' }, TP.eventName(p)),
+        p.race_type !== 'Training Only' ? h('span', { class: 'prio-mini' }, 'P' + p.priority) : null,
+        TP.icon('pencil')));
+    });
+    ds.forEach(function (s) {
+      var st = TP.match.status(s), k = st ? st.st : '';
+      root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.sessionView(s.id); } },
+        h('span', { class: 'dot', style: 'background:' + TP.typeCol(s.type) }),
+        h('span', { class: 'grow' }, TP.sportLabel(s.discipline) + ' · ' + s.type),
+        TP.match.STATUS_ICON[k] ? h('span', { class: 'st-tick st-' + k, title: TP.match.STATUS_LABEL[k] }, TP.match.STATUS_ICON[k]) : null,
+        h('span', { class: 'muted' }, TP.planAmount(s))));
+    });
+    dayActs.forEach(function (a) {
+      var linked = TP.match.sessionForAct(a.id);
+      root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.activityView(a.id); } },
+        h('span', { class: 'dot dot-act', style: 'border-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a') }),
+        h('span', { class: 'grow' }, a.name || a.type, h('span', { class: 'muted small' }, ' · Garmin')), linked ? h('span', { class: 'st-tick st-done', title: 'Completes a planned session' }, '✓') : null,
+        h('span', { class: 'muted' }, TP.match.actAmount(a))));
+    });
   };
 
   // --- Weekly summary (click a training block bar) ---

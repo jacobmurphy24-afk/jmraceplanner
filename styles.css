@@ -85,6 +85,11 @@ select.inp { appearance: auto; }
 .cal-nav { display: flex; align-items: center; justify-content: center; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; position: relative; }
 .cal-nav h2 { font-size: 1.1rem; min-width: 150px; text-align: center; }
 .cal-today { position: absolute; right: 0; }
+.cal-sel { position: relative; font-variant-numeric: tabular-nums; }
+.cal-pick { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+.dot-act { background: #fff; border: 2px solid; }
+.day-none { padding: 4px 6px; }
+.add-choices { display: flex; flex-direction: column; gap: 8px; } .add-choices .btn { min-height: 46px; font-size: 0.95rem; }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 4px 0; border-top: 1px solid var(--rule2); margin-top: 6px; font-size: 0.75rem; }
 .cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
 .cal-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -311,10 +316,6 @@ body.readonly .needs-edit, body.readonly [data-action=add-event], body.readonly 
 .mchip-missed { background: #ffe3e1; border-color: #ff3b30; } .mchip-missed .mchip-tick { color: #c4271e; }
 .achip { display: flex; align-items: center; gap: 3px; background: #f4f4f4; border: 1px dashed #8a8a8a; border-left: 4px solid; font-size: 0.68rem; padding: 2px 4px; cursor: pointer; white-space: nowrap; overflow: hidden; }
 .achip:hover { background: #ebebeb; } .achip-i .ic { width: 11px; height: 11px; color: #555; }
-.mv-cdots i.st-done { box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px var(--green); }
-.mv-cdots i.st-partial { box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px var(--amber); }
-.mv-cdots i.st-missed { box-shadow: 0 0 0 1.5px #fff, 0 0 0 3px var(--red); }
-.mv-cdots i.act { background: #fff !important; border: 1.5px solid #666; }
 .yv-dot.st-done { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); } .yv-dot.st-partial { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber); }
 .yv-dot.st-missed { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
 .yv-act { font-size: 8px; line-height: 10px; color: #666; cursor: pointer; }
@@ -459,13 +460,20 @@ body.gated .app, body.gated #modal-root { display: none !important; }
   .tabbar .tab-add .ic { width: 26px; height: 26px; background: var(--ink); color: #fff; padding: 6px; box-sizing: content-box; }
   .main-day { display: block; padding: 6px 12px 16px; }
   .cal { padding: 8px 8px 4px; }
-  .cal-nav h2 { font-size: 1rem; min-width: 120px; }
+  .cal-nav h2 { font-size: 1rem; min-width: 0; }
   .yv-year { grid-template-columns: 1fr 1fr; grid-auto-rows: 200px; min-height: 0; gap: 6px; }
-  .mv-grid { min-height: 0; grid-template-rows: auto !important; grid-auto-rows: 58px; }
+  .mv-grid { min-height: 0; grid-template-rows: auto !important; grid-auto-rows: minmax(72px, auto); }
+  .mv-day { padding: 2px 1px; }
   .mv-full { display: none; }
   .mv-compact { display: flex; flex-direction: column; gap: 3px; flex: 1; justify-content: flex-end; }
   .mv-cbars { display: flex; flex-direction: column; gap: 2px; } .mv-cbars i { display: block; height: 3px; } .mv-cbars i.recov { opacity: 0.45; }
-  .mv-cdots { display: flex; gap: 2px; justify-content: center; flex-wrap: wrap; } .mv-cdots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+  .mv-ctext { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .mv-ct { display: block; font-size: 0.56rem; font-weight: 700; line-height: 1.25; padding: 0 1px 0 2px; border: 1px solid var(--ink); border-left: 3px solid; background: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mv-ct.mchip-done { background: #d9f3e8; border-color: #00a86b; } .mv-ct.mchip-partial { background: #fff0cc; border-color: #e0a100; } .mv-ct.mchip-missed { background: #ffe3e1; border-color: #ff3b30; }
+  .mv-ct.mv-ca { border-style: dashed; border-left-style: solid; background: #f4f4f4; font-weight: 600; }
+  .mv-cmore { font-size: 0.55rem; color: var(--muted); text-align: center; line-height: 1.1; }
+  .main-day .day-head { display: none; }
+  .cal-nav { gap: 6px; }
   .mv-numrow { justify-content: center; } .mv-num { font-size: 0.8rem; width: 24px; height: 24px; line-height: 24px; }
   .mv-wd { font-size: 0.7rem; }
   .cal-today { position: static; }
@@ -476,6 +484,9 @@ body.gated .app, body.gated #modal-root { display: none !important; }
   .wk-body { padding-left: 12px; }
   .md-shade { padding: 0; align-items: stretch; }
   .md { max-width: none !important; max-height: none; min-height: 100vh; min-height: 100dvh; border: none; }
+  .md-shade:has(.add-sheet) { align-items: flex-end; }
+  .md.add-sheet { min-height: 0; border-top: 1px solid var(--ink); padding-bottom: calc(14px + var(--safe-b)); }
+  .md.add-sheet .md-head { padding-top: 14px; }
   .md-head { padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 4px; position: sticky; top: 0; background: #fff; z-index: 2; border-bottom: 1px solid var(--rule2); }
   .md-body { padding: 8px 16px 16px; }
   .md-foot { position: sticky; bottom: 0; background: #fff; padding: 10px 16px calc(10px + var(--safe-b)); }
@@ -572,9 +583,26 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
 .achip.linked { border-style: solid; opacity: 0.75; }
 .mw-ready { border-left: 4px solid; padding: 6px 12px; margin: 12px 0 6px; } .mw-ready b { font-size: 1.1rem; }
 .top-map .route-map { height: 380px; }
-@media (max-width: 1000px) { .mw-grid { grid-template-columns: 1fr; } .mw-day { min-height: 0; } .mw-day-h { justify-content: flex-start; gap: 8px; } .mw-rest { text-align: left; margin-top: 0; } }
+/* Home: Garmin status button (green outline connected, red not) and a centred week picker */
+.g-status-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.g-status { border-width: 2px; gap: 7px; } .g-status.g-on { border-color: var(--green); } .g-status.g-off { border-color: var(--red); }
+.g-dot { width: 8px; height: 8px; border-radius: 50%; } .g-on .g-dot { background: var(--green); } .g-off .g-dot { background: var(--red); }
+.g-status-msg { font-size: 0.72rem; color: var(--accent-d); max-width: 260px; text-align: right; }
+.mw-head-row { flex-wrap: nowrap; align-items: flex-start; }
+.mw-nav { justify-content: center; }
+.mchip-s, .mw-ds { display: none; }
 @media (max-width: 760px) {
-  .mw-title { min-width: 0; flex: 1; }
+  .mw-title { min-width: 0; }
+  /* The week as seven narrow columns: sport and amount in each chip. */
+  .mw-grid { gap: 3px; }
+  .mw-day { padding: 3px 2px; min-height: 84px; gap: 2px; }
+  .mw-day-h { flex-direction: column; align-items: center; font-size: 0.7rem; margin-bottom: 1px; }
+  .mw-dl, .mw-grid .mchip-t, .mw-grid .achip-i { display: none; } .mw-ds { display: inline; }
+  .mw-grid .mchip, .mw-grid .achip { flex-direction: column; align-items: stretch; gap: 0; padding: 2px 1px 2px 3px; border-left-width: 3px; line-height: 1.15; }
+  .mw-grid .mchip-s { display: block; font-weight: 700; font-size: 0.6rem; overflow: hidden; text-overflow: ellipsis; }
+  .mw-grid .mchip-d { font-size: 0.58rem; overflow: hidden; text-overflow: ellipsis; }
+  .mw-grid .mchip-tick { font-size: 0.6rem; line-height: 1; }
+  .mw-rest { font-size: 0.65rem; margin-top: 6px; }
   .top-map .route-map { height: 280px; }
 }
 
@@ -583,3 +611,26 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
 .tc .ax-l { font-size: 10px; fill: #777; font-weight: 700; }
 
 .rp-page-head { border-left-width: 6px; margin-bottom: 14px; align-items: flex-end; } .rp-page-head h2 { font-size: 1.4rem; margin: 2px 0; }
+/* Garmin history upload */
+.drop-zone { display: flex; flex-direction: column; align-items: center; gap: 8px; border: 2px dashed var(--rule); padding: 18px 12px; margin: 10px 0; text-align: center; }
+.drop-zone.over { border-color: var(--accent); background: var(--accent-l, rgba(0,0,0,0.03)); }
+.import-card .hint { margin-top: 6px; }
+
+/* Stand-alone pages (privacy policy, Garmin guide) */
+.doc { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; line-height: 1.55; }
+.doc-top { display: flex; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--ink); margin-bottom: 22px; }
+.doc-top a { color: inherit; text-decoration: none; } .doc-top a.logo { color: #fff; font-weight: 800; font-size: 0.8rem; }
+.doc h1 { font-size: 1.7rem; margin: 6px 0 4px; }
+.doc h2 { font-size: 1.15rem; margin: 30px 0 8px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.doc h3 { font-size: 1rem; margin: 18px 0 6px; }
+.doc p, .doc li { font-size: 0.97rem; }
+.doc a { color: var(--accent-d); }
+.doc ol.steps { counter-reset: s; list-style: none; padding: 0; }
+.doc ol.steps > li { counter-increment: s; position: relative; padding: 0 0 14px 40px; }
+.doc ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 26px; height: 26px; background: var(--ink); color: #fff; font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
+.doc .note { border-left: 3px solid var(--accent); background: var(--soft); padding: 10px 14px; margin: 14px 0; }
+.doc table { border-collapse: collapse; width: 100%; font-size: 0.9rem; margin: 10px 0; }
+.doc th, .doc td { border: 1px solid var(--rule); padding: 7px 9px; text-align: left; vertical-align: top; }
+.doc th { background: var(--rule2); }
+.doc .todo { background: #fff3c4; padding: 0 3px; }
+.doc .updated { color: var(--muted); font-size: 0.88rem; }
