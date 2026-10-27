@@ -125,8 +125,8 @@
       return;
     }
     if (r.short_history) {
-      var from = TP.addDays(rv.start, -42);
-      root.appendChild(h('div', { class: 'notice' }, h('span', null, 'Your Garmin data on this device starts ' + TP.fmt(r.history_from, '%d %b %Y') + ', so where your fitness started this block can’t be measured yet. Sync from ' + TP.fmt(from, '%d %b %Y') + ' (6 weeks before the block) for the full review.'),
+      var from = TP.addDays(rv.start, -120);
+      root.appendChild(h('div', { class: 'notice' }, h('span', null, 'Your Garmin data on this device starts ' + TP.fmt(r.history_from, '%d %b %Y') + ', so where your fitness started this block can’t be measured yet. Sync from ' + TP.fmt(from, '%d %b %Y') + ' (4 months before the block) for the fitness gain and the full review.'),
         G.connected() ? h('button', { class: 'btn btn-sm', disabled: !!G.syncing, onclick: function () { G.sync(from, r.history_from, true); } }, TP.icon('download'), 'Sync the earlier weeks') : null));
     }
     var tabs = ['Summary', 'Weeks', 'Training', 'Recovery', 'Taper & readiness', 'Race'], box = h('div');
@@ -140,10 +140,10 @@
     draw(TP.view.reviewTab || 'Summary');
   };
 
-  function bar(key, val) {
+  function bar(key, val, note) {
     var col = C.scoreCol(val);
     return h('div', { class: 'cbar' }, h('div', { class: 'cbar-t' }, h('span', null, COMP[key]), h('b', { style: 'color:' + col }, fin(val) ? Math.round(val) : 'no data')),
-      h('div', { class: 'cbar-b' }, h('div', { style: 'width:' + (fin(val) ? Math.round(val) : 0) + '%;background:' + col })));
+      h('div', { class: 'cbar-b' }, h('div', { style: 'width:' + (fin(val) ? Math.round(val) : 0) + '%;background:' + col })), note ? h('div', { class: 'cbar-n' }, note) : null);
   }
   function summary(box, r) {
     var rs = r.race_summary;
@@ -153,7 +153,10 @@
     box.appendChild(h('div', { class: 'br-sum' },
       h('div', null, h('div', { class: 'br-rings big' }, C.ring(r.training_score, 'Training effectiveness', 96, verdict(r.training_score) + ' build'), C.ring(r.race_score, 'Race execution', 96, fin(r.race_score) ? verdict(r.race_score) + ' race' : 'Race to come')),
         h('div', { class: 'br-head' }, head)),
-      h('div', null, h('div', { class: 'form-section' }, 'Training effectiveness'), Object.keys(r.components).map(function (k) { return bar(k, r.components[k]); })),
+      h('div', null, h('div', { class: 'form-section' }, 'Training effectiveness'), Object.keys(r.components).map(function (k) {
+        var tp = r.taper, note = k === 'fitness' ? (r.short_history ? 'Needs about 4 months of Garmin data before the block' : sp('Fitness (CTL) %.0f → %.0f at its peak, %+.0f%%', tp.ctl0, tp.ctl_peak, tp.gain_pct)) : null;
+        return bar(k, r.components[k], note);
+      })),
       h('div', null, h('div', { class: 'form-section' }, 'Race execution'), r.race_components ? Object.keys(r.race_components).map(function (k) { return bar(k, r.race_components[k]); }) : h('p', { class: 'muted small' }, 'Available once the race activity is synced.'))));
     box.appendChild(h('div', { class: 'coach-2', style: 'margin-top:14px' },
       h('div', null, h('div', { class: 'form-section' }, '✓ What worked'), CO.list(r.findings.good, 'good')),

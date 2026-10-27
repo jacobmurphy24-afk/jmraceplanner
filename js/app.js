@@ -15,6 +15,8 @@
       if (v.mode === 'Month') TP.renderMonth(cal); else TP.renderYear(cal);
       main.appendChild(cal);
       var md = h('div', { class: 'main-day' }); TP.renderDay(md); main.appendChild(md);
+    } else if (v.page === 'myweek') {
+      var mp = h('div', { class: 'page' }); TP.myWeek.page(mp); main.appendChild(mp);
     } else if (v.page === 'reports') {
       var rp = h('div', { class: 'page' }); TP.renderReports(rp); main.appendChild(rp);
     } else if (v.page === 'garmin') {

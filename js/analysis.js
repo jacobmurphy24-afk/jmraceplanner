@@ -1255,8 +1255,9 @@
     var ctl0 = load[0].ctl, peakRow = pre.length ? pre.reduce(function (a, b) { return b.ctl > a.ctl ? b : a; }) : load[0], ctlPeak = peakRow.ctl;
     var ctlRace = pre.length ? pre[pre.length - 1].ctl : ctl0, tsbRace = load[load.length - 1].tsb;
     var gain = ctl0 > 5 ? (ctlPeak / ctl0 - 1) * 100 : ctlPeak > 20 ? 40 : 0, comp = {};
-    // Fitness gain needs ~6 weeks of data before the block to know where fitness started.
-    var shortHist = !!ctx.historyStart && ctx.historyStart > addDays(start, -42);
+    // Fitness gain needs ~4 months of data before the block to know where fitness started: with less, the
+    // starting fitness is an estimate that can be 20+ points out (checked against full-history results).
+    var shortHist = !!ctx.historyStart && ctx.historyStart > addDays(start, -120);
     comp.fitness = shortHist ? null : clamp(40 + 2.4 * gain);
     var wk = train.weekly, weeksOk = wk.length ? wk.filter(function (w) { return w.sessions >= 3; }).length / wk.length : 0;
     var ud = Object.keys(by(acts, 'date')).sort(), longGaps = 0;
@@ -1358,7 +1359,7 @@
 
   function blockFindings(b) {
     var good = [], change = [], c = b.components, tp = b.taper;
-    if (!fin(c.fitness)) change.push(sprintf('Your Garmin data starts %s, so where fitness began this block can’t be measured. Sync from %s (6 weeks before the block) for the fitness gain and a fuller review.', TP.fmt(b.history_from, '%d %b %Y'), TP.fmt(addDays(b.start, -42), '%d %b %Y')));
+    if (!fin(c.fitness)) change.push(sprintf('Your Garmin data starts %s, so where fitness began this block can’t be measured. Sync from %s (4 months before the block) for the fitness gain and a fuller review.', TP.fmt(b.history_from, '%d %b %Y'), TP.fmt(addDays(b.start, -120), '%d %b %Y')));
     else if (c.fitness >= 75) good.push(sprintf('Fitness rose %.0f%% (CTL %.0f → %.0f peak) - the block delivered a real training stimulus.', tp.gain_pct, tp.ctl0, tp.ctl_peak));
     else change.push(sprintf('Fitness only rose %.0f%% (CTL %.0f → %.0f). Next block: progress load by 3-5 CTL per week through the build phase.', tp.gain_pct, tp.ctl0, tp.ctl_peak));
     if (c.consistency >= 80) good.push('Training was consistent week to week, the single biggest driver of endurance gains.');

@@ -577,3 +577,5 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
   .mw-title { min-width: 0; flex: 1; }
   .top-map .route-map { height: 280px; }
 }
+
+.cbar-n { font-size: 0.7rem; color: var(--faint); margin-top: 2px; }

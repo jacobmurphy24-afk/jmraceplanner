@@ -1,7 +1,7 @@
 // Calendar: year overview, month view, the selected-day panel and the weekly summary pop-up.
 (function (TP) {
   var h = TP.h;
-  TP.view = { page: 'calendar', mode: 'Year', month: TP.monthStart(TP.today()), year: new Date().getFullYear(), selected: TP.today() };
+  TP.view = { page: 'myweek', mode: 'Year', month: TP.monthStart(TP.today()), year: new Date().getFullYear(), selected: TP.today() };
   TP.clip = { day: null, week: null };
 
   TP.select = function (d) {

@@ -15,10 +15,11 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body data-page="calendar">
+<body data-page="myweek">
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
       <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 9.5V20h5v-6h4v6h5V9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
       <symbol id="i-calendar" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="1"/><path d="M3.5 10h17M8 3v4M16 3v4"/></g></symbol>
       <symbol id="i-chart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/></g></symbol>
       <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
@@ -46,6 +47,7 @@
       <div id="side-account"></div>
       <div class="side-section">Workspace</div>
       <nav class="nav">
+        <button data-page="myweek"><svg class="ic"><use href="#i-home"/></svg>My Week</button>
         <button data-page="calendar"><svg class="ic"><use href="#i-calendar"/></svg>Calendar</button>
         <button data-page="reports"><svg class="ic"><use href="#i-chart"/></svg>Block reports</button>
         <button data-page="garmin"><svg class="ic"><use href="#i-activity"/></svg>Analysis</button>
@@ -78,11 +80,11 @@
 
     <!-- Phone tab bar -->
     <nav class="tabbar">
+      <button data-page="myweek"><svg class="ic"><use href="#i-home"/></svg><span>My Week</span></button>
       <button data-page="calendar"><svg class="ic"><use href="#i-calendar"/></svg><span>Calendar</span></button>
-      <button data-page="reports"><svg class="ic"><use href="#i-chart"/></svg><span>Reports</span></button>
       <button data-action="add-session" class="tab-add" aria-label="Add session"><svg class="ic"><use href="#i-plus"/></svg></button>
+      <button data-page="reports"><svg class="ic"><use href="#i-chart"/></svg><span>Reports</span></button>
       <button data-page="garmin"><svg class="ic"><use href="#i-activity"/></svg><span>Analysis</span></button>
-      <button data-action="add-event"><svg class="ic"><use href="#i-plus"/></svg><span>Event</span></button>
     </nav>
   </div>
 

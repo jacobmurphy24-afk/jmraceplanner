@@ -388,7 +388,7 @@
   };
 
   // --- Page ---
-  TP.view.gtab = TP.view.gtab || 'My Week';
+  TP.view.gtab = TP.view.gtab || 'Overview';
   TP.renderGarmin = function (root) {
     if (TP.view.review) { TP.blocks.page(root, TP.view.review); return; }
     root.appendChild(h('div', { class: 'page-head page-head-row' }, h('h2', null, 'Analysis'), TP.glossaryButton()));
@@ -396,15 +396,14 @@
     if (!G.connected() && !G.acts.length) root.appendChild(connectCard());
     else root.appendChild(syncBar());
     if (G.prep) root.appendChild(h('div', { class: 'panel prep' }, h('div', { class: 'spinner' }), h('span', { id: 'g-prep' }, 'Analysing activities: ' + G.prep.done + ' of ' + G.prep.total + '…')));
-    var tabs = ['My Week', 'Overview', 'Block reviews'], body = h('div');
-    if (tabs.indexOf(TP.view.gtab) < 0) TP.view.gtab = 'My Week';
+    var tabs = ['Overview', 'Block reviews'], body = h('div');
+    if (tabs.indexOf(TP.view.gtab) < 0) TP.view.gtab = 'Overview';
     root.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), TP.view.gtab, function (v) { TP.view.gtab = v; draw(); }, 'tabs'));
     root.appendChild(body);
     function draw() {
       TP.clear(body);
       try {
-        if (TP.view.gtab === 'My Week') TP.myWeek.render(body);
-        else if (!G.loaded) body.appendChild(h('p', { class: 'muted' }, 'Loading…'));
+        if (!G.loaded) body.appendChild(h('p', { class: 'muted' }, 'Loading…'));
         else if (!G.acts.length) body.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No Garmin activities yet'), h('p', null, G.connected() ? 'Sync from Garmin above. Twelve weeks or more gives the analysis enough to work with.' : 'Connect Garmin above, then sync.')));
         else if (TP.view.gtab === 'Block reviews') TP.blocks.render(body);
         else TP.coach.render(body);
@@ -415,6 +414,12 @@
   // The last date synced, and a one-press sync that picks up from there.
   G.lastSynced = function () { var r = readLS(RANGES, null) || initialRanges(); return r.length ? r[r.length - 1][1] : null; };
   var showOptions = false, showConnect = false;
+  // The one-line sync bar, also on My Week (new users get a link to the connection instructions instead).
+  G.syncBar = function () {
+    if (!G.connected() && !G.acts.length) return h('div', { class: 'sync-bar' }, h('span', { class: 'small grow' }, h('b', null, 'Connect Garmin'), h('span', { class: 'muted' }, ' to see your training, fitness and health here.')),
+      h('button', { class: 'btn btn-sm btn-primary', onclick: function () { TP.go('garmin'); } }, 'Connect'));
+    return syncBar();
+  };
   function syncBar() {
     var last = G.lastSynced(), today = TP.today();
     if (!G.connected()) {
@@ -422,7 +427,7 @@
         h('button', { class: 'btn btn-sm', onclick: function () { showConnect = !showConnect; TP.changed(); } }, showConnect ? 'Hide' : 'Connect Garmin'));
       return showConnect ? h('div', null, bar0, connectCard()) : bar0;
     }
-    var from = last ? (TP.addDays(last, -3) < TP.addDays(today, -365) ? TP.addDays(today, -365) : TP.addDays(last, -3)) : TP.addDays(today, -84);
+    var from = last ? (TP.addDays(last, -3) < TP.addDays(today, -365) ? TP.addDays(today, -365) : TP.addDays(last, -3)) : TP.addDays(today, -182);
     var quick = h('button', { class: 'btn btn-sm btn-primary', disabled: !!G.syncing, onclick: function () { G.sync(from, today, true); } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync');
     var bar = h('div', { class: 'sync-bar' },
       h('span', { class: 'small grow' }, h('b', null, 'Garmin connected'), h('span', { class: 'muted' }, ' · ' + G.acts.length + ' activities' + (last ? ' · synced to ' + TP.fmt(last, '%d %b') : ''))),
@@ -459,7 +464,7 @@
 
   function syncCard() {
     var saved = readLS(RANGE, {});
-    var from = TP.input('date', saved.from || TP.addDays(TP.today(), -84)), to = TP.input('date', TP.today());
+    var from = TP.input('date', saved.from || TP.addDays(TP.today(), -182)), to = TP.input('date', TP.today());
     var fit = TP.input('checkbox', '', { checked: saved.fit !== false });
     var k = G.key();
     var btn = h('button', { class: 'btn btn-primary', disabled: !!G.syncing, onclick: function () {

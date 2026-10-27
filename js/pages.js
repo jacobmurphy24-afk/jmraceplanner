@@ -11,7 +11,7 @@
     var st = TP.view.stack, top = st[st.length - 1];
     if (top) return top.title;
     if (TP.view.page === 'garmin' && TP.view.review) return TP.view.review.name;
-    return { calendar: 'Calendar', reports: 'Block reports', garmin: 'Analysis' }[TP.view.page] || 'Back';
+    return { myweek: 'My Week', calendar: 'Calendar', reports: 'Block reports', garmin: 'Analysis' }[TP.view.page] || 'Back';
   }
   // p: { kind: 'activity' | 'sport', title, ... }
   TP.openPage = function (p) {
@@ -123,7 +123,7 @@
   // The analysis pages and pop-ups get underlined terms; the planner's own pages don't.
   function scan() {
     pending = false;
-    if (document.body.dataset.page === 'garmin' || TP.view.stack.length) { var m = mainEl(); if (m) annotate(m); }
+    if (document.body.dataset.page === 'garmin' || document.body.dataset.page === 'myweek' || TP.view.stack.length) { var m = mainEl(); if (m) annotate(m); }
     document.querySelectorAll('.md.gloss .md-body').forEach(annotate);
   }
   var pending = false;

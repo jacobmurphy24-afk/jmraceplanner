@@ -8,6 +8,13 @@
   function kpi(v, l, s, col) { return h('div', { class: 'kpi', style: col ? 'border-left-color:' + col : null }, h('div', { class: 'kpi-v', style: col ? 'color:' + col : null }, v), h('div', { class: 'kpi-l' }, l), s ? h('div', { class: 'kpi-s' }, s) : null); }
   function sportOf(s) { var sp2 = TP.sportOf(s.discipline); return ['Swim', 'Bike', 'Run'].indexOf(sp2) >= 0 ? sp2 : 'Other'; }
 
+  // The page: My Week is the site's home page.
+  MW.page = function (root) {
+    root.appendChild(h('div', { class: 'page-head page-head-row' }, h('h2', null, 'My Week'), TP.glossaryButton()));
+    root.appendChild(TP.garmin.syncBar());
+    if (TP.garmin.prep) root.appendChild(h('div', { class: 'panel prep' }, h('div', { class: 'spinner' }), h('span', { id: 'g-prep' }, 'Analysing activities: ' + TP.garmin.prep.done + ' of ' + TP.garmin.prep.total + '…')));
+    MW.render(root);
+  };
   MW.render = function (root) {
     var G = TP.garmin, today = TP.today(), ws = TP.addDays(TP.weekStart(today), 7 * TP.view.mwOffset), we = TP.addDays(ws, 6);
     var hasG = G.loaded && G.acts.length > 0, ctx = hasG ? G.ctx() : null, M = TP.match;
@@ -99,7 +106,11 @@
     var due = rb.sess.filter(function (s) { return s.date < TP.today(); }), hasG = TP.garmin.loaded && TP.garmin.acts.length;
     var done = hasG ? due.filter(function (s) { return TP.match.linkFor(s.id); }).length : null;
     p.appendChild(h('div', { class: 'mini-kpis' },
-      (function () { var nb = TP.blockWeeks(ev); return h('div', null, h('b', null, rb.status === 'Upcoming' || wkN < 1 ? '–' : wkN > nb ? (ev.race_type === 'Training Only' ? 'Final week' : 'Race week') : 'Week ' + wkN + '/' + nb), h('span', null, 'of the build')); })(),
+      (function () {
+        var nb = TP.blockWeeks(ev);
+        if (entry.kind === 'recov') return h('div', null, h('b', null, 'Recovery'), h('span', null, 'after the race'));
+        return h('div', null, h('b', null, rb.status === 'Upcoming' || wkN < 1 ? '–' : wkN > nb ? (ev.race_type === 'Training Only' ? 'Final week' : 'Race week') : 'Week ' + wkN + '/' + nb), h('span', null, 'of the build'));
+      })(),
       h('div', null, h('b', null, hasG && due.length ? done + '/' + due.length : rb.sess.length), h('span', null, hasG && due.length ? 'sessions done' : 'sessions planned')),
       h('div', null, h('b', null, TP.daysBetween(TP.today(), rb.race_date) >= 0 ? TP.daysBetween(TP.today(), rb.race_date) + ' days' : 'Done'), h('span', null, 'to ' + (ev.race_type === 'Training Only' ? 'the end' : 'race day')))));
     // How it's going (Garmin): the block's progress check.
