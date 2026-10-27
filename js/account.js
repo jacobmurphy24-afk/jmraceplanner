@@ -239,6 +239,27 @@
     setTimeout(function () { nm.focus(); }, 50);
   }
 
+  // The site can't send email itself, so the invite is sent from the owner's own email app, phone share
+  // sheet or clipboard. The invitation is waiting in the plan whichever way they hear about it.
+  function tellThem(email, role, planName) {
+    var me = (C.user && C.user.name) || 'I', url = 'https://jmraceplanner.co.uk';
+    var subject = me + ' invited you to the training plan “' + planName + '”';
+    var text = 'Hi,\n\n' + me + ' has invited you to the training plan “' + planName + '” on Training Planner, where you ' + (role === 'viewer' ? 'can view it' : 'can view and edit it') + '.\n\n' +
+      'To join:\n1. Go to ' + url + '\n2. Create an account (or sign in) with this email address: ' + email + '\n3. Confirm your email using the link Training Planner sends you\n4. Open Plans & sharing and press Join on the invitation.\n';
+    var copy = function () {
+      var done = function () { TP.toast('Message copied. Paste it into an email or text.'); };
+      if (navigator.clipboard) navigator.clipboard.writeText(subject + '\n\n' + text).then(done, function () { TP.toast('Couldn’t copy – select the message and copy it.', 'warn'); });
+    };
+    var box = h('textarea', { class: 'inp', rows: 9, readonly: true }, subject + '\n\n' + text);
+    var md = TP.modal({ size: 'm', stack: true, title: h('div', null, h('div', { class: 'md-t' }, 'Invite saved – now let them know'),
+      h('div', { class: 'md-sub' }, 'The app doesn’t send emails, so send this message yourself. The invitation is waiting for ' + email + ' in the plan.')),
+      body: [box, h('p', { class: 'hint' }, 'They must sign up with exactly ' + email + ' to see the invitation.')],
+      footer: [h('button', { class: 'btn', onclick: copy }, TP.icon('copy'), 'Copy message'),
+        navigator.share ? h('button', { class: 'btn', onclick: function () { navigator.share({ title: subject, text: text }).catch(function () {}); } }, 'Share…') : null,
+        h('span', { class: 'grow' }),
+        h('a', { class: 'btn btn-primary', href: 'mailto:' + email.replace(/[^\w.@+-]/g, '') + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text), onclick: function () { setTimeout(function () { md.close(); }, 300); } }, 'Email them')] });
+  }
+
   function sharing(m) {
     var p = C.plan, u = C.user, isOwner = C.role() === 'owner', out = h('div');
     out.appendChild(h('div', { class: 'form-section' }, 'People in “' + p.name + '”'));
@@ -257,7 +278,8 @@
     (p.inviteEmails || []).forEach(function (em) {
       rows.appendChild(h('div', { class: 'person pending' }, h('div', { class: 'avatar' }, '@'),
         h('div', { class: 'grow' }, h('div', { class: 'strong' }, em), h('div', { class: 'muted small' }, 'Invited · ' + ROLE_LABEL[p.inviteRoles[em]] + ' · waiting for them to join')),
-        isOwner ? h('button', { class: 'btn btn-sm', onclick: function () { C.cancelInvite(em).catch(fail); } }, 'Cancel invite') : null));
+        isOwner ? h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm', onclick: function () { tellThem(em, p.inviteRoles[em], p.name); } }, 'Send again'),
+          h('button', { class: 'btn btn-sm', onclick: function () { C.cancelInvite(em).catch(fail); } }, 'Cancel invite')) : null));
     });
     out.appendChild(rows);
 
@@ -265,10 +287,11 @@
       var email = TP.input('email', '', { placeholder: 'their email address', inputmode: 'email', autocapitalize: 'off' });
       var role = TP.selectEl([{ value: 'editor', label: 'Can edit' }, { value: 'viewer', label: 'View only' }], 'editor', { class: 'inp' });
       var send = h('button', { class: 'btn btn-primary', onclick: function () {
-        busy(send, C.invite(email.value, role.value)).then(function () { TP.toast('Invited ' + email.value.trim() + '.'); email.value = ''; }).catch(fail);
+        var em = email.value.trim().toLowerCase(), r = role.value;
+        busy(send, C.invite(em, r)).then(function () { email.value = ''; tellThem(em, r, p.name); }).catch(fail);
       } }, 'Invite');
       out.appendChild(h('div', { class: 'invite-form' }, TP.field('Invite someone by email', email), TP.field('They can', role), send));
-      out.appendChild(h('p', { class: 'hint' }, 'They’ll see the invitation here, in Plans & sharing, once they sign in with that email (or create an account with it) and confirm their address. Tell them to visit jmraceplanner.co.uk.'));
+      out.appendChild(h('p', { class: 'hint' }, 'The app doesn’t send emails itself: after you invite someone, send them the message it writes for you (from your own email, or by text). They join by signing in to jmraceplanner.co.uk with that email address.'));
       out.appendChild(h('div', { class: 'form-section' }, 'Plan settings'));
       var nm = TP.input('text', p.name);
       out.appendChild(h('div', { class: 'invite-form' }, TP.field('Plan name', nm),
