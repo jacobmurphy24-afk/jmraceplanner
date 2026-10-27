@@ -261,6 +261,17 @@
     var ir = Object.assign({}, p.inviteRoles); ir[email] = role;
     return F.updateDoc(planRef(), { inviteEmails: Object.keys(ir), inviteRoles: ir, updatedAt: F.serverTimestamp() });
   };
+  // Emails the invitation (through the site's relay, which checks you own the plan). Resolves when sent;
+  // rejects with a message to show if it couldn't be.
+  C.emailInvite = function (email) {
+    var id = C.activeId;
+    return auth.currentUser.getIdToken().then(function (t) {
+      return fetch('https://garmin.jmraceplanner.co.uk/invite', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: id, email: email.trim().toLowerCase() }) });
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (b) { if (!r.ok || !b.sent) throw new Error(b.error || 'The invite email couldn’t be sent.'); });
+    }, function () { throw new Error('No connection, so the invite email couldn’t be sent.'); });
+  };
   C.cancelInvite = function (email) {
     var p = planData(C.activeId), ir = Object.assign({}, p.inviteRoles); delete ir[email];
     return F.updateDoc(planRef(), { inviteEmails: Object.keys(ir), inviteRoles: ir, updatedAt: F.serverTimestamp() });
