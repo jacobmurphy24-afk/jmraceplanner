@@ -64,7 +64,7 @@
       return h('span', { class: 'yv-dot' + (k ? ' st-' + k : ''), title: TP.sportLabel(s.discipline) + ' · ' + s.type + (k ? ' (' + TP.match.STATUS_LABEL[k].toLowerCase() + ')' : ''), style: 'background:' + TP.typeCol(s.type) + (k === 'done' || k === 'partial' ? '' : '55'),
         onclick: stop(function () { TP.select(d); TP.sessionView(s.id); }) }, TP.SPORT_LETTER[TP.sportOf(s.discipline)] || '?');
     }), ds.length > 3 ? h('span', { class: 'yv-more' }, '+' + (ds.length - 3)) : null,
-      ds.length <= 3 && ex.length ? h('span', { class: 'yv-act', title: ex.length + ' Garmin ' + (ex.length > 1 ? 'activities' : 'activity') + ' not in the plan', onclick: stop(function () { TP.select(d); TP.activityView(ex[0].id); }) }, '●') : null) : null;
+      ds.length <= 3 && ex.length ? h('span', { class: 'yv-act', title: ex.length + (ex.length > 1 ? ' activities' : ' activity') + ' not in a plan', onclick: stop(function () { TP.select(d); TP.activityView(ex[0].id); }) }, '●') : null) : null;
     var blk = ov.filter(function (e) { return e.kind !== 'race'; });
     var bars = blk.length ? h('div', { class: 'yv-bars' }, blk.map(function (e) {
       return h('div', { class: 'yv-bar' + (e.kind === 'recov' ? ' yv-recov' : ''), title: e.title, style: 'background:' + TP.deep(e.col),
@@ -125,7 +125,7 @@
   // A Garmin activity that isn't a planned session.
   function achip(a) {
     var amt = a.distance_m > 50 ? TP.round(a.distance_m / 1000, 1) + ' km' : a.moving_s ? Math.round(a.moving_s / 60) + ' min' : '';
-    return h('div', { class: 'achip', style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a'), title: 'Garmin: ' + (a.name || a.type) + ' (not in the plan)',
+    return h('div', { class: 'achip', style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a'), title: (a.name || a.type) + ': activity not in a plan',
       onclick: stop(function () { TP.select(a.date); TP.activityView(a.id); }) },
       h('span', { class: 'achip-i' }, TP.icon('activity')), h('span', { class: 'mchip-t' }, a.name || a.sport), h('span', { class: 'mchip-d' }, amt));
   }
