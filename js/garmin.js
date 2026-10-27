@@ -360,9 +360,9 @@
   };
 
   // --- Page ---
-  TP.view.gtab = TP.view.gtab || 'Analysis';
+  TP.view.gtab = TP.view.gtab || 'Overview';
   TP.renderGarmin = function (root) {
-    root.appendChild(h('div', { class: 'page-head' }, h('h2', null, 'Garmin'),
+    root.appendChild(h('div', { class: 'page-head' }, h('h2', null, 'Analysis'),
       h('p', { class: 'muted' }, 'Your Garmin activities analysed the way a coach would: training load, fitness and fatigue, intensity, power and pace, and a review of each training block and its race.')));
     if (!G.connected()) root.appendChild(connectCard()); else root.appendChild(syncCard());
     if (!G.loaded) { root.appendChild(h('p', { class: 'muted' }, 'Loading…')); return; }
@@ -372,13 +372,13 @@
     }
     if (G.prep) root.appendChild(h('div', { class: 'panel prep' }, h('div', { class: 'spinner' }), h('span', { id: 'g-prep' }, 'Analysing activities: ' + G.prep.done + ' of ' + G.prep.total + '…')));
     var body = h('div');
-    var tabs = ['Analysis', 'Block reviews', 'Activities', 'Thresholds'];
+    var tabs = ['Overview', 'Block reviews', 'Activities', 'Thresholds'];
     root.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), TP.view.gtab, function (v) { TP.view.gtab = v; draw(); }, 'tabs'));
     root.appendChild(body);
     function draw() {
       TP.clear(body);
       try {
-        if (TP.view.gtab === 'Analysis') TP.coach.render(body);
+        if (TP.view.gtab === 'Overview') TP.coach.render(body);
         else if (TP.view.gtab === 'Block reviews') TP.blocks.render(body);
         else if (TP.view.gtab === 'Thresholds') TP.coach.thresholds(body);
         else body.appendChild(activities());

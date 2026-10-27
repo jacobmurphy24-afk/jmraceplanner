@@ -209,7 +209,7 @@
           h('span', { class: 'dot', style: 'background:' + (TP.SPORT_COLOURS[a.sport] || '#a0a0a0') }),
           h('span', { class: 'grow' }, h('b', null, a.name || a.type), h('div', { class: 'muted small' }, TP.fmt(a.date, '%a %d %b') + ' · ' + actAmount(a) + (other ? ' · now linked to ' + TP.sportLabel(other.discipline) + ' ' + other.type + ' (' + TP.fmt(other.date, '%a') + ')' : ''))),
           TP.fmt(a.date, '%d %b') === TP.fmt(s.date, '%d %b') ? h('span', { class: 'tag' }, 'same day') : null);
-      })) : h('p', { class: 'muted' }, 'No Garmin activities from ' + TP.fmt(from, '%d %b') + ' to ' + TP.fmt(to, '%d %b') + '. Sync that period on the Garmin page first.'),
+      })) : h('p', { class: 'muted' }, 'No Garmin activities from ' + TP.fmt(from, '%d %b') + ' to ' + TP.fmt(to, '%d %b') + '. Sync that period on the Analysis page first.'),
       footer: h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Cancel') });
   };
   // Pick a planned session for a Garmin activity.

@@ -1069,7 +1069,7 @@
     if (tp.z3_min < 5) change.push('Almost no intensity in the last 2 weeks. Short race-pace efforts during a taper preserve sharpness.');
     var rs = b.race_summary;
     if (b.race && b.race.some(function (a) { return a.discipline === 'Other' && /multi_sport|triathlon/.test(a.type_key || ''); }))
-      change.push('This race is a multisport file without its FIT file yet. Sync it with FIT files on the Garmin page to get swim / bike / run splits, pacing and leg-by-leg predictions.');
+      change.push('This race is a multisport file without its FIT file yet. Sync it with FIT files on the Analysis page to get swim / bike / run splits, pacing and leg-by-leg predictions.');
     if (rs) {
       if (fin(rs.perf_ratio)) {
         if (rs.perf_ratio >= 1.05) {
