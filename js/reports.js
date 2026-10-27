@@ -238,10 +238,6 @@
     if (pr.empty) return h('p', { class: 'muted' }, pr.reason);
     var n = pr.now, rp = pr.race_proj, out = h('div');
     out.appendChild(h('p', { class: 'muted small' }, 'Based on your Garmin activities up to ' + TP.fmt(pr.to, '%d %b') + (pr.to < rb.race_date ? ', and the sessions still planned from then to race day.' : '.')));
-    out.appendChild(h('div', { class: 'kpis kpis-5' },
-      kpi(sp('%.0f → %.0f', pr.ctl0, n.ctl), 'Fitness', sp('%+.1f a week', pr.ramp)), kpi(Math.round(n.atl), 'Fatigue', 'last 7 days'), kpi(sp('%+.0f', n.tsb), 'Form', CO.formLabel(n.tsb)),
-      kpi(Math.round(pr.h_done) + ' h', 'Trained', pr.h_plan > 0 ? sp('of %.0f h planned so far', pr.h_plan) : pr.sessions_done + ' activities'),
-      kpi(sp('%.0f / %+.0f', rp.ctl, rp.tsb), pr.to < rb.race_date ? 'Race day (projected)' : 'Race day', 'fitness / form')));
     var vl = [{ x: rb.race_date, col: '#111', label: 'race' }]; if (pr.to < rb.race_date) vl.push({ x: TP.addDays(pr.to, 1), col: '#111', dash: '4 3', label: 'today' });
     var pa = CO.panel('Fitness, fatigue and form across the block', 'Solid is what you’ve done; dashed is where the planned sessions take you (estimated from your usual training stress per hour in each sport).');
     pa.appendChild(CO.pmcChart(pr.load, { vlines: vl, bands: [{ x0: TP.addDays(rb.race_date, -14), x1: rb.race_date, fill: '#fff6dd', label: 'final 2 weeks' }] }));
@@ -249,6 +245,10 @@
     var pb = CO.panel('Weekly training load by sport', 'Solid bars are training done, faded bars are planned.');
     pb.appendChild(CO.weeklyChart(pr.weekly, 'tss', { vlines: pr.to < rb.race_date ? [{ x: TP.addDays(pr.to, 1), col: '#111', dash: '4 3' }] : null }));
     out.appendChild(pb);
+    out.appendChild(h('div', { class: 'kpis kpis-5' },
+      kpi(sp('%.0f → %.0f', pr.ctl0, n.ctl), 'Fitness', sp('%+.1f a week', pr.ramp)), kpi(Math.round(n.atl), 'Fatigue', 'last 7 days'), kpi(sp('%+.0f', n.tsb), 'Form', CO.formLabel(n.tsb)),
+      kpi(Math.round(pr.h_done) + ' h', 'Trained', pr.h_plan > 0 ? sp('of %.0f h planned so far', pr.h_plan) : pr.sessions_done + ' activities'),
+      kpi(sp('%.0f / %+.0f', rp.ctl, rp.tsb), pr.to < rb.race_date ? 'Race day (projected)' : 'Race day', 'fitness / form')));
     out.appendChild(h('div', { class: 'coach-2' },
       h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Going well'), CO.list(pr.good, 'good')),
       h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Keep an eye on'), CO.list(pr.watch, 'watch'))));

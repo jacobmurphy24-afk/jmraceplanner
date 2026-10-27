@@ -33,6 +33,8 @@
     if (r.empty) { root.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No activities in this period'), h('p', null, 'Pick another period, or sync it from Garmin above.'))); return; }
     var last = r.load[r.load.length - 1], first = r.load[0], nW = Math.max(1, (TP.daysBetween(per.from, per.to) + 1) / 7);
     var hours = A.sum(r.acts.map(function (a) { return a.hours; })), tss = A.sum(r.acts.map(function (a) { return a.tss; }));
+    // Charts first: fitness / fatigue / form and weekly load, then the numbers and the coach's report.
+    root.appendChild(h('div', { class: 'coach-2' }, pmc(r), weeklyLoad(r)));
     root.appendChild(h('div', { class: 'kpis kpis-6' },
       kpi(Math.round(last.ctl), 'Fitness (CTL)', sp('%+.0f over the period', last.ctl - first.ctl)),
       kpi(Math.round(last.atl), 'Fatigue (ATL)', 'last 7 days'),
@@ -44,8 +46,6 @@
     var grid = h('div', { class: 'coach-grid' }), left = h('div'), right = h('div');
     grid.appendChild(left); grid.appendChild(right); root.appendChild(grid);
     left.appendChild(report(r));
-    right.appendChild(pmc(r));
-    right.appendChild(weeklyLoad(r));
     right.appendChild(intensity(r));
     root.appendChild(weeksTable(r, ctx));
     var perfRow = h('div', { class: 'coach-2' });
@@ -56,7 +56,7 @@
     if (r.ef.data.length) root.appendChild(efChart(r));
     var rec = recovery(ctx.wellness, per.from, per.to); if (rec) root.appendChild(rec);
     if (r.compliance) root.appendChild(compliance(r.compliance));
-    root.appendChild(h('p', { class: 'hint' }, 'Thresholds used: FTP ' + ctx.prof.ftp + ' W · threshold pace ' + A.fmtPace(ctx.prof.thr_pace_s_km) + ' /km · CSS ' + A.fmtPace(ctx.prof.css_s_100) + ' /100 m · threshold HR ' + ctx.prof.lthr + ' bpm. Check or change them on the Thresholds tab.'));
+    root.appendChild(h('p', { class: 'hint' }, 'Thresholds used: FTP ' + ctx.prof.ftp + ' W · threshold pace ' + A.fmtPace(ctx.prof.thr_pace_s_km) + ' /km · CSS ' + A.fmtPace(ctx.prof.css_s_100) + ' /100 m · threshold HR ' + ctx.prof.lthr + ' bpm. Check or change them in Settings → Training thresholds.'));
   };
 
   // --- Coach's report ---

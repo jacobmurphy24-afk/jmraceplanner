@@ -1067,7 +1067,7 @@
     var est = acts.filter(function (a) { return /estimated|avg HR/.test(a.tss_method); }).length;
     if (est) add('Data quality', 'info', sprintf('%d session(s) scored without full sensor data', est), 'These use average HR or duration-based estimates, which are less precise.', 'Sync again with FIT files, or wear a HR strap / power meter.');
     if (Object.keys(r.prof.sources).some(function (k) { return /default/.test(r.prof.sources[k]); }))
-      add('Data quality', 'watch', 'Some thresholds are defaults, not measured', 'Training stress and zones are only as accurate as your thresholds.', 'Enter tested FTP, threshold pace, CSS and LTHR under Your thresholds.');
+      add('Data quality', 'watch', 'Some thresholds are defaults, not measured', 'Training stress and zones are only as accurate as your thresholds.', 'Enter tested FTP, threshold pace, CSS and LTHR in Settings → Training thresholds.');
     var order = { risk: 1, watch: 2, good: 3, info: 4 };
     return out.sort(function (a, b) { return order[a.severity] - order[b.severity]; });
   }

@@ -103,7 +103,7 @@
   function annotate(root) {
     var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: function (n) {
       for (var p = n.parentNode; p && p !== root.parentNode; p = p.parentNode) {
-        if (SKIP[p.nodeName] || (p.classList && (p.classList.contains('g-term') || p.classList.contains('tabs') || p.classList.contains('no-gloss') || p.classList.contains('tc')))) return NodeFilter.FILTER_REJECT;
+        if (SKIP[p.nodeName] || (p.classList && (p.classList.contains('g-term') || p.classList.contains('tabs') || p.classList.contains('no-gloss') || p.classList.contains('tc') || p.classList.contains('chart-leg')))) return NodeFilter.FILTER_REJECT;
       }
       return n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     } });

@@ -164,21 +164,22 @@
     for (var w = w0; w <= rv.race_date && w <= today; w = TP.addDays(w, 7)) list.push(w);
     if (!list.length) { box.appendChild(h('p', { class: 'muted' }, 'No weeks of this block have started yet.')); return; }
     var sessions = rv.calendar_id ? TP.state.sessions.filter(function (s) { return s.block_id === rv.calendar_id; }) : TP.state.sessions;
+    if (r.train && r.train.acts) box.appendChild(CO.weeklyChart(r.train.acts.map(function (a) { return { week: a.week, discipline: a.discipline, tss: a.tss, hours: a.hours }; }), 'tss'));
     box.appendChild(h('p', { class: 'muted small' }, 'Every week of the block, newest first. Completed weeks are scored; the current week shows progress so far. Click a week for its full analysis.'));
     box.appendChild(CO.weekRows(list, sessions, ctx, function (wk) { return 'Week ' + (Math.round(TP.daysBetween(w0, wk) / 7) + 1) + ' of ' + rv.name; }, rv.calendar_id));
   }
   function training(box, r, rv) {
     var tp = r.taper, nw = Math.max(1, r.train.weekly.length), acts = r.train.acts, d = r.train.dist_all;
+    var p = CO.panel('Weekly training load and fitness');
+    p.appendChild(CO.weeklyChart(acts.map(function (a) { return { week: a.week, discipline: a.discipline, tss: a.tss, hours: a.hours }; }), 'tss'));
+    p.appendChild(CO.pmcChart(r.load, { height: 170 }));
+    box.appendChild(p);
     box.appendChild(h('div', { class: 'kpis kpis-5' },
       kpi(sp('%.0f → %.0f', tp.ctl0, tp.ctl_peak), 'Fitness (CTL)', sp('%+.0f%% over the block', tp.gain_pct)),
       kpi(sp('%.1f h', A.sum(acts.map(function (a) { return a.hours; })) / nw), 'Hours a week', sp('%.0f TSS a week', A.sum(acts.map(function (a) { return a.tss; })) / nw)),
       kpi(sp('%.1f', acts.length / nw), 'Sessions a week'),
       kpi(d.type.replace(' / low-intensity focus', ''), 'Intensity mix', fin(d.p1) ? sp('%.0f / %.0f / %.0f %%', d.p1, d.p2, d.p3) : null),
       r.train.compliance ? kpi(Math.round(r.train.compliance.completion) + '%', 'Plan compliance', Math.round(r.train.compliance.volume) + '% of planned km') : kpi('–', 'Plan compliance', 'no sessions planned')));
-    var p = CO.panel('Weekly training load and fitness');
-    p.appendChild(CO.weeklyChart(acts.map(function (a) { return { week: a.week, discipline: a.discipline, tss: a.tss, hours: a.hours }; }), 'tss'));
-    p.appendChild(CO.pmcChart(r.load, { height: 170 }));
-    box.appendChild(p);
     if (r.sport_impact.length) {
       box.appendChild(h('div', { class: 'form-section' }, 'How each sport responded'));
       box.appendChild(h('p', { class: 'muted small' }, 'Did each sport get faster, and did it build the endurance to hold up for longer? Like-for-like sessions early and late in the build: speed from best efforts, endurance from efficiency and heart-rate drift on long sessions.'));
@@ -229,6 +230,10 @@
     if (!rc) { box.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No sleep or HRV data for this block'), h('p', null, 'Sync the block from Garmin to fetch nightly sleep, overnight HRV and resting heart rate.'))); return; }
     var rf = A.recoveryFindings(rc), col = function (ok, warn) { return ok ? '#00a86b' : warn ? '#d99a00' : '#ff3b30'; };
     var tile = function (v, l, s, c) { return h('div', { class: 'kpi', style: 'border-left-color:' + c }, h('div', { class: 'kpi-v', style: 'color:' + c }, v), h('div', { class: 'kpi-l' }, l), s ? h('div', { class: 'kpi-s' }, s) : null); };
+    var bands = [{ x0: TP.addDays(r.race_date, -14), x1: r.race_date, fill: '#fff6dd', label: 'final 2 weeks' }];
+    box.appendChild(C.xy({ title: 'Daily training stress (TSS)', height: 130, x: { type: 'date', min: r.start, max: r.race_date }, y: { fmt: function (v) { return Math.round(v); }, zero: true, min: 0 },
+      series: [{ name: 'TSS', col: '#9a9a9a', kind: 'bar', barW: 0.85, pts: r.load.map(function (d) { return [d.date, d.tss]; }), fmt: function (v) { return Math.round(v) + ' TSS'; } }], bands: bands }));
+    var ch = CO.recoveryCharts(rc.daily, r.start, r.race_date, { bands: bands }); if (ch) box.appendChild(ch);
     box.appendChild(h('p', { class: 'small' }, sp('Based on %d nights of Garmin sleep tracking during the block. Overnight HRV is the most sensitive sign of how well you’re absorbing training: it falls when stress outpaces recovery.', rc.nights)));
     box.appendChild(h('div', { class: 'kpis kpis-5' },
       tile(fin(rc.sleep_h) ? rc.sleep_h.toFixed(1) + ' h' : '–', 'Average sleep', fin(rc.short_nights) ? Math.round(rc.short_nights) + '% of nights under 7 h' : null, col(rc.sleep_h >= 8, rc.sleep_h >= 7)),
@@ -236,10 +241,6 @@
       tile(fin(rc.hrv) ? Math.round(rc.hrv) + ' ms' : '–', 'Overnight HRV', fin(rc.hrv_base) ? 'baseline ' + Math.round(rc.hrv_base) + ' ms' : null, col(rc.hrv_below_pct <= 15, rc.hrv_below_pct <= 30)),
       tile(fin(rc.hrv_below_pct) ? Math.round(rc.hrv_below_pct) + '%' : '–', 'Nights HRV low', 'below your normal range', col(rc.hrv_below_pct <= 15, rc.hrv_below_pct <= 30)),
       tile(fin(rc.rhr_drift) ? sp('%+.0f bpm', rc.rhr_drift) : '–', 'Resting HR change', fin(rc.rhr_first) ? sp('%.0f → %.0f bpm', rc.rhr_first, rc.rhr_last) : null, col(rc.rhr_drift < 2, rc.rhr_drift < 4))));
-    var bands = [{ x0: TP.addDays(r.race_date, -14), x1: r.race_date, fill: '#fff6dd', label: 'final 2 weeks' }];
-    box.appendChild(C.xy({ title: 'Daily training stress (TSS)', height: 130, x: { type: 'date', min: r.start, max: r.race_date }, y: { fmt: function (v) { return Math.round(v); }, zero: true, min: 0 },
-      series: [{ name: 'TSS', col: '#9a9a9a', kind: 'bar', barW: 0.85, pts: r.load.map(function (d) { return [d.date, d.tss]; }), fmt: function (v) { return Math.round(v) + ' TSS'; } }], bands: bands }));
-    var ch = CO.recoveryCharts(rc.daily, r.start, r.race_date, { bands: bands }); if (ch) box.appendChild(ch);
     box.appendChild(h('div', { class: 'coach-2', style: 'margin-top:12px' },
       h('div', null, h('div', { class: 'form-section' }, '✓ Recovering well'), CO.list(rf.good, 'good')),
       h('div', null, h('div', { class: 'form-section' }, '→ To improve'), CO.list(rf.change, 'watch'))));
@@ -267,6 +268,9 @@
     if (rc && fin(rc.pre_race_sleep)) checks.push(rc.pre_race_sleep >= 7.5 ? ['good', 'Slept well before the race', 'Good sleep over the last 3 nights before the race.', rc.pre_race_sleep.toFixed(1) + ' h', 'avg, last 3 nights']
       : ['warn', 'Short on sleep before the race', 'Bank extra sleep earlier in race week, since the night before is often poor.', rc.pre_race_sleep.toFixed(1) + ' h', 'avg, last 3 nights']);
     var good = checks.filter(function (c) { return c[0] === 'good'; }).length, bad = checks.filter(function (c) { return c[0] === 'warn' || c[0] === 'bad'; }).length;
+    var from = TP.addDays(r.race_date, -42) > r.start ? TP.addDays(r.race_date, -42) : r.start;
+    box.appendChild(CO.pmcChart(r.load.filter(function (d) { return d.date >= from; }), { bands: [{ x0: TP.addDays(r.race_date, -14), x1: r.race_date, fill: '#fff6dd', label: 'final 2 weeks' }], vlines: [{ x: r.race_date, col: '#111', label: 'race' }] }));
+    box.appendChild(h('p', { class: 'hint' }, 'Blue = fitness (long-term load), pink = fatigue (last 7 days), bars = form (fitness minus fatigue; above zero is fresh). The shaded area is the final two weeks.'));
     box.appendChild(h('div', { class: 'br-head', style: 'text-align:left;font-size:1rem' }, !bad ? 'You arrived at the start line fresh, fit and sharp: a well-executed taper.'
       : good >= bad ? sp('Mostly well prepared: %d of %d readiness checks passed. See what to adjust below.', good, checks.length) : sp('The taper didn’t quite land: only %d of %d readiness checks passed.', good, checks.length)));
     var ST = { good: ['✓', '#00a86b'], ok: ['–', '#2b4dff'], warn: ['!', '#d99a00'], bad: ['✕', '#ff3b30'] };
@@ -275,9 +279,6 @@
       return h('div', { class: 'check-row' }, h('span', { class: 'sev', style: 'background:' + s[1] }, s[0]), h('div', { class: 'grow' }, h('b', null, c[1]), h('div', { class: 'small' }, c[2])),
         c[3] ? h('div', { class: 'right' }, h('div', { class: 'strong', style: 'color:' + s[1] }, c[3]), h('div', { class: 'hint' }, c[4])) : null);
     })));
-    var from = TP.addDays(r.race_date, -42) > r.start ? TP.addDays(r.race_date, -42) : r.start;
-    box.appendChild(CO.pmcChart(r.load.filter(function (d) { return d.date >= from; }), { bands: [{ x0: TP.addDays(r.race_date, -14), x1: r.race_date, fill: '#fff6dd', label: 'final 2 weeks' }], vlines: [{ x: r.race_date, col: '#111', label: 'race' }] }));
-    box.appendChild(h('p', { class: 'hint' }, 'Blue = fitness (long-term load), pink = fatigue (last 7 days), bars = form (fitness minus fatigue; above zero is fresh). The shaded area is the final two weeks.'));
   }
   function raceTab(box, r) {
     if (!r.legs) { box.appendChild(h('p', { class: 'muted' }, r.upcoming ? 'The race hasn’t happened yet. Come back after race day and sync.' : 'No race activity found on race day. Edit this review to pick it, or sync the race.')); return; }
@@ -287,6 +288,19 @@
       h('div', null, h('div', { class: 'lbl' }, 'Finish time'), h('div', { class: 'big' }, A.fmtDur(rs.time_s)), rs.transition_s > 0 ? h('div', { class: 'muted small' }, 'including ' + A.fmtDur(rs.transition_s) + ' in transitions') : null),
       h('div', { class: 'right' }, fin(rs.display_ratio) || fin(rs.perf_ratio) ? h('div', { class: 'strong' }, 'Overall: ' + pct(fin(rs.display_ratio) ? rs.display_ratio : rs.perf_ratio) + (fin(rs.predicted_s) ? ' (predicted ' + A.fmtDur(rs.predicted_s) + ')' : '')) : null,
         fin(rs.goal_delta) ? h('div', { class: 'strong', style: 'color:' + (rs.goal_delta <= 0 ? '#00a86b' : '#d99a00') }, 'Goal ' + A.fmtDur(rs.goal_s) + ': ' + A.fmtDur(Math.abs(rs.goal_delta)) + (rs.goal_delta <= 0 ? ' under' : ' over')) : null)));
+    box.appendChild(h('div', { class: 'form-section' }, 'Pacing through each leg'));
+    box.appendChild(h('p', { class: 'muted small' }, 'Your pace or power through the race (smoothed). Flat or rising is good; a line falling away to the right is a fade. Heart rate is shown underneath.'));
+    r.legs.forEach(function (l) {
+      var s = l.stream, a = l.act; if (!s || !s.series || !s.series.length) return;
+      var isW = s.unit === 'W', disc = a.discipline, conv = function (v) { return isW ? v : disc === 'Run' ? (v > 1 ? 1000 / v : null) : disc === 'Swim' ? (v > 0.3 ? 100 / v : null) : v * 3.6; };
+      var paceAxis = !isW && (disc === 'Run' || disc === 'Swim');
+      box.appendChild(C.xy({ title: disc + (isW ? ' power (W)' : paceAxis ? ' pace' + (disc === 'Run' ? ' (/km)' : ' (/100 m)') + ', faster is higher' : ' speed (km/h)'), height: 150, x: { type: 'num', fmt: function (v) { return Math.round(v) + "'"; } },
+        tipX: function (v) { return TP.fmtDuration(Math.round(v * 60)) + ' in'; },
+        y: paceAxis ? { fmt: A.fmtPace, invert: true } : { fmt: function (v) { return Math.round(v); } },
+        series: [{ name: isW ? 'Power' : paceAxis ? 'Pace' : 'Speed', col: A.SPORT_COLOURS[disc], width: 1.8, pts: s.series.map(function (p) { return [p[0], conv(p[1])]; }), fmt: paceAxis ? A.fmtPace : function (v) { return isW ? Math.round(v) + ' W' : v.toFixed(1) + ' km/h'; } }] }));
+      if (s.series.some(function (p) { return fin(p[2]); })) box.appendChild(C.xy({ height: 100, x: { type: 'num', fmt: function (v) { return Math.round(v) + "'"; } }, tipX: function (v) { return TP.fmtDuration(Math.round(v * 60)) + ' in'; },
+        y: { fmt: function (v) { return Math.round(v); } }, series: [{ name: 'Heart rate (bpm)', col: '#d6336c', width: 1.4, pts: s.series.map(function (p) { return [p[0], p[2]]; }) }] }));
+    });
     var cards = h('div', { class: 'legs' }), tr = r.transitions || [];
     r.legs.forEach(function (l, k) {
       var a = l.act, e = l.exp, s = l.stream, t = fin(a.race_s) ? a.race_s : a.moving_s, col = A.SPORT_COLOURS[a.discipline] || '#585858';
@@ -332,21 +346,8 @@
     if (notes.length) { box.appendChild(h('div', { class: 'form-section' }, 'What the race tells us')); box.appendChild(CO.list(notes, 'info')); }
     r.legs.forEach(function (l) {
       var e = l.exp; if (!e) return;
-      if (fin(e.implied_thr_pace)) box.appendChild(h('div', { class: 'implied' }, h('b', null, 'This race implies a threshold pace of ' + A.fmtPace(e.implied_thr_pace) + ' /km'), ' (your training before the race suggested ' + A.fmtPace(prof.thr_pace_s_km) + ' /km). Update it on the Thresholds tab if it’s right.'));
-      else if (fin(e.implied_ftp)) box.appendChild(h('div', { class: 'implied' }, h('b', null, sp('This race implies an FTP of %.0f W', e.implied_ftp)), sp(' (your training before the race suggested %d W). Update it on the Thresholds tab if it’s right.', prof.ftp)));
-    });
-    box.appendChild(h('div', { class: 'form-section' }, 'Pacing through each leg'));
-    box.appendChild(h('p', { class: 'muted small' }, 'Your pace or power through the race (smoothed). Flat or rising is good; a line falling away to the right is a fade. Heart rate is shown underneath.'));
-    r.legs.forEach(function (l) {
-      var s = l.stream, a = l.act; if (!s || !s.series || !s.series.length) return;
-      var isW = s.unit === 'W', disc = a.discipline, conv = function (v) { return isW ? v : disc === 'Run' ? (v > 1 ? 1000 / v : null) : disc === 'Swim' ? (v > 0.3 ? 100 / v : null) : v * 3.6; };
-      var paceAxis = !isW && (disc === 'Run' || disc === 'Swim');
-      box.appendChild(C.xy({ title: disc + (isW ? ' power (W)' : paceAxis ? ' pace' + (disc === 'Run' ? ' (/km)' : ' (/100 m)') + ', faster is higher' : ' speed (km/h)'), height: 150, x: { type: 'num', fmt: function (v) { return Math.round(v) + "'"; } },
-        tipX: function (v) { return TP.fmtDuration(Math.round(v * 60)) + ' in'; },
-        y: paceAxis ? { fmt: A.fmtPace, invert: true } : { fmt: function (v) { return Math.round(v); } },
-        series: [{ name: isW ? 'Power' : paceAxis ? 'Pace' : 'Speed', col: A.SPORT_COLOURS[disc], width: 1.8, pts: s.series.map(function (p) { return [p[0], conv(p[1])]; }), fmt: paceAxis ? A.fmtPace : function (v) { return isW ? Math.round(v) + ' W' : v.toFixed(1) + ' km/h'; } }] }));
-      if (s.series.some(function (p) { return fin(p[2]); })) box.appendChild(C.xy({ height: 100, x: { type: 'num', fmt: function (v) { return Math.round(v) + "'"; } }, tipX: function (v) { return TP.fmtDuration(Math.round(v * 60)) + ' in'; },
-        y: { fmt: function (v) { return Math.round(v); } }, series: [{ name: 'Heart rate (bpm)', col: '#d6336c', width: 1.4, pts: s.series.map(function (p) { return [p[0], p[2]]; }) }] }));
+      if (fin(e.implied_thr_pace)) box.appendChild(h('div', { class: 'implied' }, h('b', null, 'This race implies a threshold pace of ' + A.fmtPace(e.implied_thr_pace) + ' /km'), ' (your training before the race suggested ' + A.fmtPace(prof.thr_pace_s_km) + ' /km). Update it in Settings → Training thresholds if it’s right.'));
+      else if (fin(e.implied_ftp)) box.appendChild(h('div', { class: 'implied' }, h('b', null, sp('This race implies an FTP of %.0f W', e.implied_ftp)), sp(' (your training before the race suggested %d W). Update it in Settings → Training thresholds if it’s right.', prof.ftp)));
     });
   }
 
@@ -363,20 +364,6 @@
     root.appendChild(h('div', { class: 'act-head', style: '--c:' + col },
       h('div', null, h('div', { class: 'rp-type', style: 'color:' + col }, 'How your ' + s.sport.toLowerCase() + ' responded · ' + rv.name), h('h2', null, s.sport)),
       h('div', { class: 'btn-row', style: 'align-items:center' }, h('span', { class: 'vword big-t', style: 'color:' + vc }, s.verdict), TP.glossaryButton())));
-    root.appendChild(h('div', { class: 'kpis kpis-5' }, kpi(s.sessions, 'Sessions'), kpi(s.hours.toFixed(1) + ' h', 'Time'),
-      kpi(s.sport === 'Swim' ? s.km.toFixed(1) + ' km' : Math.round(s.km) + ' km', 'Distance'), kpi(Math.round(s.share) + '%', 'Of all training'),
-      kpi(sp('%.0f → %.0f', s.ctl0, s.ctl_peak), s.sport + ' fitness', 'start → peak')));
-    if (s.markers) {
-      var mk = h('div', { class: 'panel' });
-      ['Endurance', 'Speed'].forEach(function (kind) {
-        var x = s.markers.filter(function (m) { return m.kind === kind; }); if (!x.length) return;
-        var ch = kind === 'Speed' ? s.speed_change : s.endurance_change;
-        mk.appendChild(h('div', { class: 'mk-h' }, h('span', null, kind), fin(ch) ? h('span', { style: 'color:' + (ch > 1.5 ? '#00a86b' : ch < -1.5 ? '#ff3b30' : '#666') }, sp('%+.1f%%', ch)) : null));
-        x.forEach(function (m) { mk.appendChild(h('div', { class: 'mk' }, h('span', null, m.label), h('span', { class: 'nowrap' }, h('b', null, m.early + ' → ' + m.late), h('span', { style: 'font-weight:700;color:' + (m.change > 1.5 ? '#00a86b' : m.change < -1.5 ? '#ff3b30' : '#666') }, sp(' %+.1f%%', m.change))))); });
-      });
-      mk.appendChild(h('div', { class: 'hint' }, s.emphasis + ' Compared: ' + s.compare + '.'));
-      root.appendChild(mk);
-    } else root.appendChild(h('p', { class: 'muted small' }, 'Not enough comparable sessions early and late in the block to measure a change.'));
     // Weekly volume, and this sport's fitness: two charts, one scale each.
     var acts = r.train.acts.filter(function (a) { return a.discipline === s.sport; }), metric = 'hours', box = h('div');
     var ctx = TP.garmin.ctx(), sl = A.loadModel(ctx.scored.filter(function (a) { return a.discipline === s.sport; }), r.start, TP.addDays(r.race_date, -1) < TP.today() ? TP.addDays(r.race_date, -1) : TP.today());
@@ -393,6 +380,20 @@
     var pv = h('div', { class: 'panel' }, h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Volume and fitness'),
       TP.chips([{ value: 'hours', label: 'Hours' }, { value: 'km', label: 'Distance' }], metric, function (v) { metric = v; draw(); }, 'seg')), box);
     root.appendChild(pv); draw();
+    root.appendChild(h('div', { class: 'kpis kpis-5' }, kpi(s.sessions, 'Sessions'), kpi(s.hours.toFixed(1) + ' h', 'Time'),
+      kpi(s.sport === 'Swim' ? s.km.toFixed(1) + ' km' : Math.round(s.km) + ' km', 'Distance'), kpi(Math.round(s.share) + '%', 'Of all training'),
+      kpi(sp('%.0f → %.0f', s.ctl0, s.ctl_peak), s.sport + ' fitness', 'start → peak')));
+    if (s.markers) {
+      var mk = h('div', { class: 'panel' });
+      ['Endurance', 'Speed'].forEach(function (kind) {
+        var x = s.markers.filter(function (m) { return m.kind === kind; }); if (!x.length) return;
+        var ch = kind === 'Speed' ? s.speed_change : s.endurance_change;
+        mk.appendChild(h('div', { class: 'mk-h' }, h('span', null, kind), fin(ch) ? h('span', { style: 'color:' + (ch > 1.5 ? '#00a86b' : ch < -1.5 ? '#ff3b30' : '#666') }, sp('%+.1f%%', ch)) : null));
+        x.forEach(function (m) { mk.appendChild(h('div', { class: 'mk' }, h('span', null, m.label), h('span', { class: 'nowrap' }, h('b', null, m.early + ' → ' + m.late), h('span', { style: 'font-weight:700;color:' + (m.change > 1.5 ? '#00a86b' : m.change < -1.5 ? '#ff3b30' : '#666') }, sp(' %+.1f%%', m.change))))); });
+      });
+      mk.appendChild(h('div', { class: 'hint' }, s.emphasis + ' Compared: ' + s.compare + '.'));
+      root.appendChild(mk);
+    } else root.appendChild(h('p', { class: 'muted small' }, 'Not enough comparable sessions early and late in the block to measure a change.'));
     // Repeated sessions
     var fams = (s.families || []).filter(function (f) { return f.verdict !== 'Not comparable'; }).sort(function (a, b) { return b.n - a.n; });
     root.appendChild(h('h3', { class: 'sec-h' }, 'Repeated sessions'));

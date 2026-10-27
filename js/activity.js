@@ -55,6 +55,9 @@
         h('h2', null, a.name || a.type), h('div', { class: 'muted' }, TP.fmt(a.date, '%A %d %B %Y') + (a.start && a.start.length > 11 ? ', ' + a.start.slice(11, 16) : ''))),
       h('div', { class: 'btn-row', style: 'align-items:center' }, type ? h('span', { class: 'tchip big-t', style: 'color:' + (TYPE_COL[type] || '#666') }, type) : null,
         main ? h('button', { class: 'btn btn-sm needs-edit', onclick: function () { TP.saveActivity(main.id, type); } }, TP.icon('bookmark'), 'Save to planner') : null, TP.glossaryButton())));
+    // The route (outdoor activities) and the charts come first; they fill in once the data has loaded.
+    var mapBox = h('div', { class: 'top-map' }), chartBox = h('div');
+    root.appendChild(mapBox); root.appendChild(chartBox);
     if (cx.sb && (cx.sb.why_good || cx.sb.why_bad)) root.appendChild(h('div', { class: 'coach-2', style: 'margin-bottom:12px' },
       cx.sb.why_good ? h('div', { class: 'why why-good' }, '↗ ' + cx.sb.why_good.charAt(0).toUpperCase() + cx.sb.why_good.slice(1) + '.') : null,
       cx.sb.why_bad ? h('div', { class: 'why why-bad' }, '! ' + cx.sb.why_bad.charAt(0).toUpperCase() + cx.sb.why_bad.slice(1) + '.') : null));
@@ -130,8 +133,8 @@
     }
 
     // Structure, charts, route, segments and splits (need the second-by-second data).
-    var structBox = h('div'), mapBox = h('div'), chartBox = h('div');
-    root.appendChild(structBox); root.appendChild(mapBox); root.appendChild(chartBox);
+    var structBox = h('div');
+    root.appendChild(structBox);
     if (s) {
       structBox.appendChild(h('div', null, section('Session structure', s.source ? (/^detected/.test(s.source) ? s.source.charAt(0).toUpperCase() + s.source.slice(1) : 'From ' + s.source) : null)));
       structBox.appendChild(h('div', { class: 'struct-label' }, s.label));

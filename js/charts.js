@@ -95,7 +95,7 @@
         else if (span <= 130) { cur = dnum(TP.weekStart(d0)); if (cur < x0) cur += 7; var st = span <= 60 ? 7 : 14; for (; cur <= x1; cur += st) xt.push(cur); }
         else { var m = TP.monthStart(d0); if (dnum(m) < x0) m = TP.addMonths(m, 1); var every = span > 800 ? 3 : span > 400 ? 2 : 1, k = 0; for (; dnum(m) <= x1; m = TP.addMonths(m, 1), k++) if (k % every === 0) xt.push(dnum(m)); }
       } else xt = nice(x0, x1, Math.max(3, Math.floor(pw / 90)));
-      var maxT = Math.max(2, Math.floor(pw / 52)), stepT = Math.ceil(xt.length / maxT);
+      var maxT = X.ticks ? Math.max(2, Math.floor(pw / 30)) : Math.max(2, Math.floor(pw / 52)), stepT = Math.ceil(xt.length / maxT);
       xt.forEach(function (v, i) {
         if (i % stepT) return;
         var lab = X.type === 'date' && x1 - x0 > 130 ? TP.fmt(dstr(v), TP.parse(dstr(v)).getMonth() === 0 ? '%b %y' : '%b') : fx(v);
