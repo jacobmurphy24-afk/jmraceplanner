@@ -162,7 +162,7 @@
         var st = TP.match.status(s), k = st ? st.st : '';
         return h('span', { class: 'mv-ct' + (k ? ' mchip-' + k : ''), style: 'border-left-color:' + TP.typeCol(s.type) }, short(TP.sportOf(s.discipline), TP.planAmount(s)));
       }), TP.match.extraOn(d).slice(0, Math.max(0, 3 - ds.length)).map(function (a) {
-        return h('span', { class: 'mv-ct mv-ca', style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a') }, short(a.sport, TP.match.actAmount(a).split(' · ')[0]));
+        return h('span', { class: 'mv-ct mv-ca', style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a') }, short(/multi_sport/.test(a.type || '') ? 'Multi' : a.sport, TP.match.actAmount(a).split(' · ')[0]));
       }), ds.length + TP.match.extraOn(d).length > 3 ? h('span', { class: 'mv-cmore' }, '+' + (ds.length + TP.match.extraOn(d).length - 3)) : null));
     return h('div', { class: 'mv-day' + (d === TP.today() ? ' mv-today' : '') + (d === TP.view.selected ? ' mv-sel' : ''), onclick: function () { TP.select(d); } },
       h('div', { class: 'mv-numrow' }, num), full, compact);

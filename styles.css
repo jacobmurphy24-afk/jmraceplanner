@@ -465,12 +465,12 @@ body.gated .app, body.gated #modal-root { display: none !important; }
   .mv-grid { min-height: 0; grid-template-rows: auto !important; grid-auto-rows: minmax(72px, auto); }
   .mv-day { padding: 2px 1px; }
   .mv-full { display: none; }
-  .mv-compact { display: flex; flex-direction: column; gap: 3px; flex: 1; justify-content: flex-end; }
+  .mv-compact { display: flex; flex-direction: column; gap: 3px; flex: 1; justify-content: flex-start; }
   .mv-cbars { display: flex; flex-direction: column; gap: 2px; } .mv-cbars i { display: block; height: 3px; } .mv-cbars i.recov { opacity: 0.45; }
   .mv-ctext { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
   .mv-ct { display: block; font-size: 0.56rem; font-weight: 700; line-height: 1.25; padding: 0 1px 0 2px; border: 1px solid var(--ink); border-left: 3px solid; background: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mv-ct.mchip-done { background: #d9f3e8; border-color: #00a86b; } .mv-ct.mchip-partial { background: #fff0cc; border-color: #e0a100; } .mv-ct.mchip-missed { background: #ffe3e1; border-color: #ff3b30; }
-  .mv-ct.mv-ca { border-style: dashed; border-left-style: solid; background: #f4f4f4; font-weight: 600; }
+  .mv-ct.mv-ca { background: #e4e4e4; }
   .mv-cmore { font-size: 0.55rem; color: var(--muted); text-align: center; line-height: 1.1; }
   .main-day .day-head { display: none; }
   .cal-nav { gap: 6px; }
