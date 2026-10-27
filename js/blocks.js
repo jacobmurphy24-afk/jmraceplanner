@@ -165,7 +165,7 @@
     if (!list.length) { box.appendChild(h('p', { class: 'muted' }, 'No weeks of this block have started yet.')); return; }
     var sessions = rv.calendar_id ? TP.state.sessions.filter(function (s) { return s.block_id === rv.calendar_id; }) : TP.state.sessions;
     box.appendChild(h('p', { class: 'muted small' }, 'Every week of the block, newest first. Completed weeks are scored; the current week shows progress so far. Click a week for its full analysis.'));
-    box.appendChild(CO.weekRows(list, sessions, ctx, function (wk) { return 'Week ' + (Math.round(TP.daysBetween(w0, wk) / 7) + 1); }));
+    box.appendChild(CO.weekRows(list, sessions, ctx, function (wk) { return 'Week ' + (Math.round(TP.daysBetween(w0, wk) / 7) + 1) + ' of ' + rv.name; }, rv.calendar_id));
   }
   function training(box, r, rv) {
     var tp = r.taper, nw = Math.max(1, r.train.weekly.length), acts = r.train.acts, d = r.train.dist_all;
@@ -182,7 +182,7 @@
     if (r.sport_impact.length) {
       box.appendChild(h('div', { class: 'form-section' }, 'How each sport responded'));
       box.appendChild(h('p', { class: 'muted small' }, 'Did each sport get faster, and did it build the endurance to hold up for longer? Like-for-like sessions early and late in the build: speed from best efforts, endurance from efficiency and heart-rate drift on long sessions.'));
-      box.appendChild(h('div', { class: 'br-grid' }, r.sport_impact.map(function (x) { return sportCard(x, rv); })));
+      box.appendChild(h('div', { class: 'br-grid' }, r.sport_impact.map(function (x) { return sportCard(x, function () { TP.openPage({ kind: 'sport', reviewId: rv.id, sport: x.sport, title: x.sport + ' · ' + rv.name }); }); })));
     }
     var top = A.topSessions(r.sessions, 6);
     box.appendChild(h('div', { class: 'form-section' }, 'Session breakdown'));
@@ -196,7 +196,8 @@
     if (!fin(f.out_first) || !fin(f.out_last)) return '';
     return A.fmtOut(f.out_first, f.sport, f.unit) + ' → ' + A.fmtOut(f.out_last, f.sport, f.unit) + (fin(f.hr_first) && fin(f.hr_last) ? sp(' at %.0f → %.0f bpm', f.hr_first, f.hr_last) : '');
   }
-  function sportCard(s, rv) {
+  // A sport's card under "How each sport responded"; open: what clicking it does (its sport page).
+  function sportCard(s, open) {
     var vc = { Improved: '#00a86b', Maintained: '#2b4dff', Declined: '#ff3b30' }[s.verdict] || '#999';
     var mk = function (kind) {
       var x = (s.markers || []).filter(function (m) { return m.kind === kind; }); if (!x.length) return null;
@@ -205,7 +206,7 @@
         x.map(function (m) { return h('div', { class: 'mk' }, h('span', null, m.label), h('span', { class: 'nowrap' }, h('b', null, m.early + ' → ' + m.late), h('span', { style: 'font-weight:700;color:' + (m.change > 1.5 ? '#00a86b' : m.change < -1.5 ? '#ff3b30' : '#666') }, sp(' %+.1f%%', m.change)))); }));
     };
     var fams = (s.families || []).filter(function (f) { return f.verdict !== 'Not comparable'; }).sort(function (a, b) { return b.n - a.n; }).slice(0, 3);
-    return h('div', { class: 'br-tile', style: 'border-top-color:' + A.SPORT_COLOURS[s.sport], onclick: function () { TP.openPage({ kind: 'sport', reviewId: rv.id, sport: s.sport, title: s.sport + ' · ' + rv.name }); } },
+    return h('div', { class: 'br-tile', style: 'border-top-color:' + A.SPORT_COLOURS[s.sport], onclick: open },
       h('div', { class: 'panel-top' }, h('b', null, s.sport), h('span', { class: 'vword', style: 'color:' + vc }, s.verdict)),
       h('div', { class: 'muted small' }, sp('%d sessions · %.1f h · %.0f km · %.0f%% of training time', s.sessions, s.hours, s.km, s.share)),
       h('div', { class: 'mk' }, h('span', null, s.sport + ' fitness (CTL)'), h('b', null, sp('%.0f → %.0f', s.ctl0, s.ctl_peak))),
@@ -350,9 +351,13 @@
   }
 
   // --- One sport within a block review (as the R app's sport page) ---
+  B.sportCard = sportCard;
+  // From a block review (p.reviewId), or from a calendar block's current progress in Reports (p.blockId).
   TP.pages.sport = function (root, p) {
-    var rv = B.list().filter(function (x) { return x.id === p.reviewId; })[0], r = rv && B.result(rv);
-    var s = r && !r.empty && r.sport_impact.filter(function (x) { return x.sport === p.sport; })[0];
+    var rv, r;
+    if (p.blockId) { var rb = TP.reportBlock(p.blockId); r = rb && TP.reportProgress(p.blockId); rv = rb && { id: null, name: rb.name }; if (r) r.race_date = TP.addDays(r.to, 1); }
+    else { rv = B.list().filter(function (x) { return x.id === p.reviewId; })[0]; r = rv && B.result(rv); }
+    var s = r && !r.empty && (r.sport_impact || []).filter(function (x) { return x.sport === p.sport; })[0];
     if (!s) { root.appendChild(h('p', { class: 'muted' }, 'This review isn’t available any more.')); return; }
     var col = A.SPORT_COLOURS[s.sport], vc = { Improved: '#00a86b', Maintained: '#2b4dff', Declined: '#ff3b30' }[s.verdict] || '#999';
     root.appendChild(h('div', { class: 'act-head', style: '--c:' + col },

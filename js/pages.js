@@ -17,13 +17,14 @@
   TP.openPage = function (p) {
     TP.closeModals();
     var m = mainEl();
-    p.back = currentTitle(); p.scroll = { main: m ? m.scrollTop : 0, win: window.scrollY };
+    p.back = p.backLabel || currentTitle(); p.scroll = { main: m ? m.scrollTop : 0, win: window.scrollY };
     TP.view.stack.push(p);
     TP.render();
     if (m) m.scrollTop = 0; window.scrollTo(0, 0);
   };
   TP.backPage = function () {
     var p = TP.view.stack.pop(); TP.render();
+    if (p && p.reopen) { p.reopen(); return; }   // opened from a pop-up: show it again
     if (p && p.scroll) requestAnimationFrame(function () { var m = mainEl(); if (m) m.scrollTop = p.scroll.main; window.scrollTo(0, p.scroll.win); });
   };
   // Draws the page on top of the stack. Returns false when there isn't one.

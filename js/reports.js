@@ -122,7 +122,7 @@
   }
 
   // --- Block pop-up ---
-  TP.blockModal = function (bid) {
+  TP.blockModal = function (bid, startTab) {
     var rb = TP.reportBlock(bid); if (!rb) return;
     var s = rb.sess, chartBox = h('div'), bigBox = h('div');
     function drawChart() {
@@ -145,19 +145,24 @@
           h('td', null, Object.keys(types).sort(function (a, b) { return types[b] - types[a]; }).map(function (t) { return h('span', { class: 'type-chip', style: 'border-color:' + TP.typeCol(t) }, t + ' ' + types[t]); })));
       })))) : h('p', { class: 'muted' }, 'No sessions planned in this block yet.');
 
+    var hasGarmin = TP.garmin && TP.garmin.loaded && TP.garmin.acts.length > 0, ctxW = hasGarmin ? TP.garmin.ctx() : null, linksW = hasGarmin ? TP.match.linkMaps() : null;
     var weeks = rb.weeks.map(function (w, i) {
       var ws = weekSess(rb, w), ph = rb.phase[i], isNow = rb.cur === i + 1;
+      var wa = hasGarmin && w <= TP.today() ? TP.TA.weekAnalysis(ctxW.scored, ctxW.wellness, rb.sess, linksW, w) : null;
+      var VC = { 'Strong week': '#00a86b', 'Solid week': '#2b4dff', 'Mixed week': '#d99a00', 'Off track': '#ff3b30', 'In progress': '#9b30ff' };
       var d = h('details', { class: 'rp-week' + (isNow ? ' now' : ''), open: isNow },
         h('summary', null, h('span', { class: 'wk-n' }, i + 1), h('span', { class: 'wk-d' }, TP.fmt(w, '%d %b') + ' – ' + TP.fmt(TP.addDays(w, 6), '%d %b')),
           h('span', { class: 'phase ' + ph.toLowerCase().replace(' ', '-') }, ph),
           h('span', { class: 'wk-sports' }, ws.length ? TP.SPORTS.filter(function (sp) { return ws.some(function (x) { return x.sport === sp; }); }).map(function (sp) {
             return h('span', null, h('i', { style: 'background:' + TP.SPORT_COLOURS[sp] }), sp + ' ' + ws.filter(function (x) { return x.sport === sp; }).length);
           }) : h('span', { class: 'muted' }, 'Nothing planned')),
-          h('span', { class: 'wk-tot' }, ws.length ? [sum(ws, 'km') > 0 ? TP.fmtKm(sum(ws, 'km')) : null, TP.fmtH(sum(ws, 'h'))].filter(Boolean).join(' · ') : '')),
+          h('span', { class: 'wk-tot' }, ws.length ? [sum(ws, 'km') > 0 ? TP.fmtKm(sum(ws, 'km')) : null, TP.fmtH(sum(ws, 'h'))].filter(Boolean).join(' · ') : ''),
+          wa ? h('a', { href: '#', class: 'wk-verdict', style: 'color:' + (VC[wa.verdict] || '#666'), onclick: function (e) { e.preventDefault(); e.stopPropagation(); TP.openPage({ kind: 'week', wk: w, blockId: rb.id, label: 'Week ' + (i + 1) + ' of ' + rb.name, title: 'Week ' + (i + 1) + ' of ' + rb.name, backLabel: rb.name + ' report', reopen: function () { TP.blockModal(rb.id, 'Weeks'); } }); } }, wa.verdict + ' →') : h('span', { class: 'wk-verdict' })),
         ws.length ? h('div', { class: 'wk-body' }, ws.map(function (x) {
           return h('div', { class: 'wk-sess', onclick: function () { TP.sessionView(x.id); } },
             h('span', { class: 'sdot', style: 'background:' + TP.typeCol(x.type) }), h('span', { class: 'wk-sd' }, TP.fmt(x.date, '%a %d')),
-            h('span', { class: 'grow strong' }, TP.sportLabel(x.discipline) + ' · ' + x.type), h('span', { class: 'wk-k' }, TP.planAmount(x)));
+            h('span', { class: 'grow strong' }, TP.sportLabel(x.discipline) + ' · ' + x.type), h('span', { class: 'wk-k' }, TP.planAmount(x)),
+            (function () { var st = hasGarmin && TP.match.status(x), k = st ? st.st : ''; return TP.match.STATUS_ICON[k] ? h('span', { class: 'st-tick st-' + k, title: TP.match.STATUS_LABEL[k] }, TP.match.STATUS_ICON[k]) : h('span', { class: 'st-tick' }); })());
         })) : h('div', { class: 'muted wk-body' }, 'Rest week or nothing planned yet.'));
       return d;
     });
@@ -170,19 +175,21 @@
         chartBox),
       h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'By sport'), sportTbl));
     var weeksTab = h('div', null, h('div', { class: 'muted small', style: 'margin-bottom:8px' }, 'Open a week to see its sessions.'), weeks);
-    var hasGarmin = TP.garmin && TP.garmin.loaded && TP.garmin.acts.length > 0;
     function tab(v) {
       TP.clear(tabsBody);
       try {
         if (v === 'Weeks') tabsBody.appendChild(weeksTab);
         else if (v === 'Progress') tabsBody.appendChild(progressTab(rb));
-        else if (v === 'Plan advice') tabsBody.appendChild(adviceTab(rb));
+        else if (v === 'Suggestions') tabsBody.appendChild(adviceTab(rb));
         else tabsBody.appendChild(overview);
       } catch (e) { console.error(e); tabsBody.appendChild(h('p', null, 'Couldn’t draw this tab: ' + e.message)); }
     }
-    var tabList = [{ value: 'Overview', label: 'Overview' }, { value: 'Weeks', label: 'Weeks' }];
-    if (hasGarmin && rb.status !== 'Upcoming') tabList.push({ value: 'Progress', label: rb.status === 'Completed' ? 'How it went' : 'Progress' });
-    tabList.push({ value: 'Plan advice', label: 'Plan advice' });
+    // As in the R app: Overview, progress (Garmin), Weeks, and suggestions while the block isn't finished.
+    var tabList = [{ value: 'Overview', label: 'Overview' }];
+    if (hasGarmin && rb.status !== 'Upcoming') tabList.push({ value: 'Progress', label: rb.status === 'Completed' ? 'Progress' : 'Current progress' });
+    tabList.push({ value: 'Weeks', label: 'Weeks' });
+    if (rb.status !== 'Completed') tabList.push({ value: 'Suggestions', label: 'Suggestions' });
+    var firstTab = startTab || (rb.status === 'In progress' ? (hasGarmin ? 'Progress' : 'Weeks') : 'Overview');
 
     var m = TP.modal({ size: 'xl', cls: 'gloss',
       title: h('div', { class: 'rp-m-head', style: '--c:' + rb.col },
@@ -192,8 +199,12 @@
         h('div', { class: 'chips-r' }, prioChip(rb.p), statusChip(rb))),
       body: [
         h('div', { class: 'kpis kpis-4' }, kpi(s.length, 'Sessions'), kpi(TP.fmtKm(sum(s, 'km')), 'Planned distance'), bigBox,
-          kpi(rb.status === 'Upcoming' ? TP.daysBetween(TP.today(), rb.start) + ' days' : rb.status === 'In progress' ? 'Week ' + rb.cur : 'Done', rb.status === 'Upcoming' ? 'Until it starts' : 'Progress')),
-        TP.chips(tabList, rb.status === 'In progress' ? 'Weeks' : 'Overview', tab, 'tabs tabs-scroll'),
+          (function () {
+            var due = s.filter(function (x) { return x.date < TP.today(); }), done = hasGarmin ? due.filter(function (x) { return TP.match.linkFor(x.id); }).length : 0;
+            return due.length && hasGarmin ? kpi(done + ' / ' + due.length, 'Done so far', Math.round(done / due.length * 100) + '%')
+              : kpi(rb.status === 'Upcoming' ? TP.daysBetween(TP.today(), rb.start) + ' days' : rb.status === 'In progress' ? 'Week ' + rb.cur : 'Done', rb.status === 'Upcoming' ? 'Until it starts' : 'Progress');
+          })()),
+        TP.chips(tabList, firstTab, tab, 'tabs tabs-scroll'),
         tabsBody],
       footer: [h('button', { class: 'btn btn-sm', onclick: function () { TP.printPlan(bid); } }, TP.icon('download'), 'Download plan (PDF)'),
                hasGarmin && rb.start <= TP.today() ? h('button', { class: 'btn btn-sm', onclick: function () {
@@ -202,7 +213,7 @@
                h('span', { class: 'grow' }),
                h('button', { class: 'btn btn-sm needs-edit', onclick: function () { m.close(); TP.eventForm(bid); } }, TP.icon('pencil'), 'Edit event'),
                h('button', { class: 'btn btn-primary btn-sm', onclick: function () { m.close(); } }, 'Close')] });
-    drawChart(); tab(rb.status === 'In progress' ? 'Weeks' : 'Overview');
+    drawChart(); tab(firstTab);
   };
 
   // --- Progress: how the block is going against Garmin, and where the remaining plan takes it ---
@@ -214,11 +225,16 @@
       return { id: s.id, date: s.date, sport: sp, h: s.h, km: s.km, type: s.type, done: !!TP.match.linkFor(s.id) };
     });
   }
-  function progressTab(rb) {
-    var A = TP.TA, CO = TP.coach, sp = A.sprintf, ctx = TP.garmin.ctx(), p = rb.p;
-    var key = { Run: p.run_dist, Triathlon: p.tri_dist, Duathlon: p.du_dist, Swim: p.swim_dist, Bike: p.bike_dist, Hyrox: p.hyrox_dist }[p.race_type];
+  // Current progress of a calendar block (also used by its sport pages).
+  TP.reportProgress = function (bid) {
+    var rb = TP.reportBlock(bid); if (!rb || !TP.garmin || !TP.garmin.acts.length) return null;
+    var p = rb.p, key = { Run: p.run_dist, Triathlon: p.tri_dist, Duathlon: p.du_dist, Swim: p.swim_dist, Bike: p.bike_dist, Hyrox: p.hyrox_dist }[p.race_type];
     var goalH = TYPICAL_H[p.race_type] && TYPICAL_H[p.race_type][key];
-    var pr = A.blockProgress(ctx, rb.start, rb.race_date, p.race_type, plannedRows(rb), goalH ? goalH * 3600 : null);
+    return TP.TA.blockProgress(TP.garmin.ctx(), rb.start, rb.race_date, p.race_type, plannedRows(rb), goalH ? goalH * 3600 : null);
+  };
+  function progressTab(rb) {
+    var A = TP.TA, CO = TP.coach, sp = A.sprintf;
+    var pr = TP.reportProgress(rb.id);
     if (pr.empty) return h('p', { class: 'muted' }, pr.reason);
     var n = pr.now, rp = pr.race_proj, out = h('div');
     out.appendChild(h('p', { class: 'muted small' }, 'Based on your Garmin activities up to ' + TP.fmt(pr.to, '%d %b') + (pr.to < rb.race_date ? ', and the sessions still planned from then to race day.' : '.')));
@@ -237,10 +253,9 @@
       h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Going well'), CO.list(pr.good, 'good')),
       h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Keep an eye on'), CO.list(pr.watch, 'watch'))));
     if (pr.sport_impact.length) out.appendChild(h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'How each sport is responding so far'),
-      pr.sport_impact.map(function (s) {
-        return h('div', { class: 'mk' }, h('span', null, h('b', null, s.sport), s.markers ? ' · ' + s.markers.map(function (m) { return m.label + ' ' + sp('%+.1f%%', m.change); }).join(' · ') : ' · not enough comparable sessions yet'),
-          h('b', { style: 'color:' + (s.verdict === 'Improved' ? '#00a86b' : s.verdict === 'Declined' ? '#ff3b30' : '#666') }, s.verdict));
-      })));
+      h('div', { class: 'br-grid', style: 'margin-top:8px' }, pr.sport_impact.map(function (s) {
+        return TP.blocks.sportCard(s, function () { TP.openPage({ kind: 'sport', blockId: rb.id, sport: s.sport, title: s.sport + ' · ' + rb.name, backLabel: rb.name + ' report', reopen: function () { TP.blockModal(rb.id, 'Progress'); } }); });
+      }))));
     if (pr.next7) out.appendChild(h('p', { class: 'muted small' }, sp('Next 7 days: %d planned sessions, about %.1f h and %.0f TSS.', pr.next7.n, pr.next7.h, pr.next7.tss)));
     return out;
   }
@@ -264,16 +279,22 @@
     var e = TP.esc, s = rb.sess, p = rb.p;
     var fk = function (x) { return x > 0 ? TP.round(x, 1) + ' km' : ''; };
     var cols = TP.SPORTS.filter(function (sp) { return s.some(function (x) { return x.sport === sp; }); });
+    // Garmin results, as in the R app's PDF: done ticks, what was done, and each week's verdict.
+    var G = TP.garmin, hasG = G && G.loaded && G.acts.length > 0, ctxP = hasG ? G.ctx() : null, linksP = hasG ? TP.match.linkMaps() : null;
+    var linkOf = function (x) { return hasG ? TP.match.linkFor(x.id) : null; };
+    var wkRes = rb.weeks.map(function (w) { return hasG && w <= TP.today() ? TP.TA.weekAnalysis(ctxP.scored, ctxP.wellness, s, linksP, w) : null; });
+    var showRes = wkRes.some(Boolean);
     var cell = function (xs, sp) { var y = xs.filter(function (x) { return x.sport === sp; }), k = sum(y, 'km'), mn = sum(y, 'duration_min'); return !y.length ? '' : k > 0 ? fk(k) : mn > 0 ? Math.round(mn) + ' min' : ''; };
     var rows = rb.weeks.map(function (w, i) {
       var xs = weekSess(rb, w), ph = rb.phase[i];
       return '<tr class="' + (ph !== 'Build' ? ph.toLowerCase().replace(' ', '-') : '') + '"><td class="wk">' + (i + 1) + '</td><td>' + TP.fmt(w, '%d %b') + ' – ' + TP.fmt(TP.addDays(w, 6), '%d %b') +
-        '</td><td>' + ph + '</td><td class="num">' + xs.length + '</td>' + cols.map(function (sp) { return '<td class="num">' + cell(xs, sp) + '</td>'; }).join('') + '<td class="num"><b>' + fk(sum(xs, 'km')) + '</b></td></tr>';
+        '</td><td>' + ph + '</td><td class="num">' + xs.length + '</td>' + cols.map(function (sp) { return '<td class="num">' + cell(xs, sp) + '</td>'; }).join('') + '<td class="num"><b>' + fk(sum(xs, 'km')) + '</b></td>' +
+        (showRes ? '<td>' + (wkRes[i] ? (wkRes[i].due_n > 0 ? wkRes[i].done_n + '/' + wkRes[i].due_n + ' done · ' : '') + e(wkRes[i].verdict) : '') + '</td>' : '') + '</tr>';
     }).join('');
     var overview = '<table class="grid"><thead><tr><th>Wk</th><th>Dates</th><th>Phase</th><th class="num">Sessions</th>' +
-      cols.map(function (sp) { return '<th class="num"><span class="sdot" style="background:' + TP.SPORT_COLOURS[sp] + '"></span>' + sp + '</th>'; }).join('') + '<th class="num">Total</th></tr></thead><tbody>' + rows +
-      '<tr class="total"><td></td><td>Total</td><td></td><td class="num">' + s.length + '</td>' + cols.map(function (sp) { return '<td class="num">' + cell(s, sp) + '</td>'; }).join('') + '<td class="num"><b>' + fk(sum(s, 'km')) + '</b></td></tr></tbody></table>';
-    var chipH = function (x) { return '<span class="chip" style="border-left-color:' + TP.typeCol(x.type) + '">' + e(TP.sportLabel(x.discipline) + ' ' + x.type) + (x.km > 0 ? ' <b>' + fk(x.km) + '</b>' : '') + '</span>'; };
+      cols.map(function (sp) { return '<th class="num"><span class="sdot" style="background:' + TP.SPORT_COLOURS[sp] + '"></span>' + sp + '</th>'; }).join('') + '<th class="num">Total</th>' + (showRes ? '<th>Result</th>' : '') + '</tr></thead><tbody>' + rows +
+      '<tr class="total"><td></td><td>Total</td><td></td><td class="num">' + s.length + '</td>' + cols.map(function (sp) { return '<td class="num">' + cell(s, sp) + '</td>'; }).join('') + '<td class="num"><b>' + fk(sum(s, 'km')) + '</b></td>' + (showRes ? '<td></td>' : '') + '</tr></tbody></table>';
+    var chipH = function (x) { return '<span class="chip" style="border-left-color:' + TP.typeCol(x.type) + '">' + e(TP.sportLabel(x.discipline) + ' ' + x.type) + (x.km > 0 ? ' <b>' + fk(x.km) + '</b>' : '') + (linkOf(x) ? ' ✓' : '') + '</span>'; };
     var months = [], mm = TP.monthStart(rb.start);
     while (mm <= TP.monthStart(TP.addDays(rb.weeks[rb.n - 1], 6))) { months.push(mm); mm = TP.addMonths(mm, 1); }
     var cal = months.map(function (m) {
@@ -295,7 +316,8 @@
         (xs.length ? xs.map(function (x) {
           var pts = TP.sessionOutline(x), right = [fk(x.km), x.duration_min > 0 ? x.duration_min + ' min' : ''].filter(Boolean).join(' · ');
           return '<div class="sess" style="border-left-color:' + TP.typeCol(x.type) + '"><div class="sh"><span class="t"><b>' + TP.fmt(x.date, '%A %d %b') + '</b> · ' + e(TP.sportLabel(x.discipline) + ' · ' + x.type) + '</span><span class="right">' + right + '</span></div>' +
-            (pts.length ? '<ul>' + pts.map(function (t) { return '<li>' + e(t) + '</li>'; }).join('') + '</ul>' : '') + (x.details ? '<div class="notes">' + e(x.details) + '</div>' : '') + '</div>';
+            (pts.length ? '<ul>' + pts.map(function (t) { return '<li>' + e(t) + '</li>'; }).join('') + '</ul>' : '') + (x.details ? '<div class="notes">' + e(x.details) + '</div>' : '') +
+            (function () { var l = linkOf(x); if (!l) return ''; var ac = l.act; return '<div class="done">✓ Done: ' + e(ac.name || 'activity') + (ac.distance_m > 50 ? ' · ' + (ac.distance_m / 1000).toFixed(1) + ' km' : '') + ' · ' + TP.fmtDuration(ac.moving_s || 0) + (ac.avg_hr ? ' · avg HR ' + Math.round(ac.avg_hr) : '') + '</div>'; })() + '</div>';
         }).join('') : '<p class="muted">Rest / nothing planned.</p>') + '</div>';
     }).join('');
     var root = document.getElementById('print-root');

@@ -401,16 +401,15 @@
     }
     if (G.prep) root.appendChild(h('div', { class: 'panel prep' }, h('div', { class: 'spinner' }), h('span', { id: 'g-prep' }, 'Analysing activities: ' + G.prep.done + ' of ' + G.prep.total + '…')));
     var body = h('div');
-    var tabs = ['Overview', 'Block reviews', 'Activities', 'Thresholds'];
+    var tabs = ['Overview', 'Block reviews'];
+    if (tabs.indexOf(TP.view.gtab) < 0) TP.view.gtab = 'Overview';
     root.appendChild(TP.chips(tabs.map(function (t) { return { value: t, label: t }; }), TP.view.gtab, function (v) { TP.view.gtab = v; draw(); }, 'tabs'));
     root.appendChild(body);
     function draw() {
       TP.clear(body);
       try {
-        if (TP.view.gtab === 'Overview') TP.coach.render(body);
-        else if (TP.view.gtab === 'Block reviews') TP.blocks.render(body);
-        else if (TP.view.gtab === 'Thresholds') TP.coach.thresholds(body);
-        else body.appendChild(activities());
+        if (TP.view.gtab === 'Block reviews') TP.blocks.render(body);
+        else TP.coach.render(body);
       } catch (e) { console.error(e); body.appendChild(h('div', { class: 'panel' }, 'Something went wrong drawing this page: ' + e.message)); }
     }
     draw();
@@ -455,7 +454,7 @@
         h('div', { class: 'muted small' }, 'API key …' + k.slice(-4) + ' · saved on this device · ' + G.acts.length + ' activities' + (G.wellness.length ? ', ' + G.wellness.length + ' nights of sleep data' : '') + ' stored here')),
         h('a', { href: '#', class: 'small', onclick: function (e) {
           e.preventDefault();
-          TP.confirm('Disconnect Garmin on this device? The API key is removed from this browser. Synced activities are kept unless you also clear them on the Activities tab.', 'Disconnect', function () { G.disconnect(); });
+          TP.confirm('Disconnect Garmin on this device? The API key is removed from this browser. Synced activities are kept unless you also clear them in Settings.', 'Disconnect', function () { G.disconnect(); });
         } }, 'Disconnect')),
       h('div', { class: 'sync-row' }, TP.field('From', from), TP.field('To', to),
         h('label', { class: 'check' }, fit, 'Also download FIT files (heart rate, power, pace each second – needed for the full analysis)'), btn),
@@ -463,27 +462,4 @@
       h('div', { class: 'hint' }, 'Each sync also fetches sleep, overnight HRV and resting heart rate for those dates, and your Garmin thresholds. Activities already on this device aren’t downloaded again.'));
   }
 
-  var shown = 40;
-  function activities() {
-    var acts = G.acts, M = TP.match, rows = acts.slice(0, shown).map(function (a) {
-      var pace = a.sport === 'Run' && a.distance_m > 0 ? TP.fmtDuration(a.moving_s / (a.distance_m / 1000)) + ' /km' : a.sport === 'Swim' && a.distance_m > 0 ? TP.fmtDuration(a.moving_s / (a.distance_m / 100)) + ' /100 m' : a.avg_power ? Math.round(a.np || a.avg_power) + ' W' : '';
-      var sc = G.scoredFor(a.id), tss = sc.reduce(function (t, x) { return t + (x.tss || 0); }, 0), sid = M.sessionForAct(a.id), s = sid && TP.state.sessions.filter(function (x) { return x.id === sid; })[0];
-      return h('tr', { class: 'click', onclick: function () { TP.activityView(a.id); } }, h('td', { class: 'nowrap' }, TP.fmt(a.date, '%a %d %b %Y')),
-        h('td', null, h('span', { class: 'sdot', style: 'background:' + (TP.SPORT_COLOURS[a.sport] || '#a0a0a0') }), a.name || a.type),
-        h('td', { class: 'num' }, a.moving_s ? TP.fmtDuration(a.moving_s) : '–'), h('td', { class: 'num' }, a.distance_m > 0 ? TP.round(a.distance_m / 1000, 2) + ' km' : '–'),
-        h('td', { class: 'num' }, pace || '–'), h('td', { class: 'num' }, a.avg_hr ? Math.round(a.avg_hr) : '–'), h('td', { class: 'num' }, sc.length ? Math.round(tss) : '–'),
-        h('td', { class: 'small' }, s ? TP.sportLabel(s.discipline) + ' · ' + s.type : h('span', { class: 'muted' }, '–')),
-        h('td', { class: 'num' }, a.fit ? '✓' : ''));
-    });
-    return h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Activities (' + acts.length + ')'),
-      h('div', { class: 'muted small' }, 'Click an activity for its full analysis and to link it to a planned session.'),
-      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
-        h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Activity'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, 'Distance'),
-          h('th', { class: 'num' }, 'Pace / power'), h('th', { class: 'num' }, 'Avg HR'), h('th', { class: 'num' }, 'TSS'), h('th', null, 'Planned session'), h('th', { class: 'num' }, 'FIT'))),
-        h('tbody', null, rows))),
-      acts.length > shown ? h('button', { class: 'btn btn-sm', style: 'margin-top:8px', onclick: function () { shown += 60; TP.changed(); } }, 'Show more') : null,
-      h('div', { class: 'btn-row', style: 'margin-top:10px' }, h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
-        TP.confirm('Delete the ' + acts.length + ' Garmin activities and sleep data stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { G.clearActs(); });
-      } }, 'Clear stored activities')));
-  }
 })(window.TP);

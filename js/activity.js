@@ -53,17 +53,20 @@
     root.appendChild(h('div', { class: 'act-head', style: '--c:' + col },
       h('div', null, h('div', { class: 'rp-type', style: 'color:' + col }, (a.sport === 'Other' ? String(a.type || '').replace(/_/g, ' ') : a.sport) + (main && main.swim_env ? ' · ' + main.swim_env : '')),
         h('h2', null, a.name || a.type), h('div', { class: 'muted' }, TP.fmt(a.date, '%A %d %B %Y') + (a.start && a.start.length > 11 ? ', ' + a.start.slice(11, 16) : ''))),
-      type ? h('span', { class: 'tchip big-t', style: 'color:' + (TYPE_COL[type] || '#666') }, type) : null));
+      h('div', { class: 'btn-row', style: 'align-items:center' }, type ? h('span', { class: 'tchip big-t', style: 'color:' + (TYPE_COL[type] || '#666') }, type) : null,
+        main ? h('button', { class: 'btn btn-sm needs-edit', onclick: function () { TP.saveActivity(main.id, type); } }, TP.icon('bookmark'), 'Save to planner') : null, TP.glossaryButton())));
     if (cx.sb && (cx.sb.why_good || cx.sb.why_bad)) root.appendChild(h('div', { class: 'coach-2', style: 'margin-bottom:12px' },
       cx.sb.why_good ? h('div', { class: 'why why-good' }, '↗ ' + cx.sb.why_good.charAt(0).toUpperCase() + cx.sb.why_good.slice(1) + '.') : null,
       cx.sb.why_bad ? h('div', { class: 'why why-bad' }, '! ' + cx.sb.why_bad.charAt(0).toUpperCase() + cx.sb.why_bad.slice(1) + '.') : null));
 
     // Numbers
-    var perf = a.sport === 'Bike' && (a.np || a.avg_power) ? Math.round(a.np || a.avg_power) + ' W' + (a.np ? ' NP' : '') : TP.paceText(a.sport, a.moving_s, a.distance_m);
+    var swimSets = s && s.unit === 'swim' && (s.segments || []).some(function (g) { return g.stroke; });
+    var perf = a.sport === 'Bike' && (a.np || a.avg_power) ? Math.round(a.np || a.avg_power) + ' W' + (a.np ? ' NP' : '')
+      : swimSets ? A.fmtOut(A.sum(s.segments.map(function (g) { return g.dist; })) / A.sum(s.segments.map(function (g) { return g.dur; })), 'Swim') : TP.paceText(a.sport, a.moving_s, a.distance_m);
     root.appendChild(h('div', { class: 'kpis kpis-4' },
       kpi(a.moving_s ? TP.fmtDuration(a.moving_s) : '–', 'Moving time', a.duration_s && Math.abs(a.duration_s - a.moving_s) > 60 ? TP.fmtDuration(a.duration_s) + ' elapsed' : null),
       kpi(a.distance_m > 0 ? (a.sport === 'Swim' ? Math.round(a.distance_m) + ' m' : TP.round(a.distance_m / 1000, 2) + ' km') : '–', 'Distance', a.elev_m ? Math.round(a.elev_m) + ' m climbing' : null),
-      kpi(perf, a.sport === 'Bike' && a.avg_power ? 'Power' : a.sport === 'Bike' ? 'Speed' : 'Pace', a.sport === 'Bike' && a.avg_power && a.distance_m ? TP.paceText('Bike', a.moving_s, a.distance_m) : null),
+      kpi(perf, a.sport === 'Bike' && a.avg_power ? 'Power' : a.sport === 'Bike' ? 'Speed' : swimSets ? 'Swim pace' : 'Pace', a.sport === 'Bike' && a.avg_power && a.distance_m ? TP.paceText('Bike', a.moving_s, a.distance_m) : swimSets ? 'excluding rests' : null),
       kpi(a.avg_hr ? Math.round(a.avg_hr) + ' bpm' : '–', 'Avg heart rate', a.avg_hr ? Math.round(a.avg_hr / prof.lthr * 100) + '% of threshold' + (a.max_hr ? ' · max ' + Math.round(a.max_hr) : '') : null)));
     if (rows.length) {
       var ifv = main && fin(main.intensity) ? main.intensity : null;
@@ -105,7 +108,7 @@
       root.appendChild(h('div', { class: 'panel g-link' }, h('p', { class: 'small muted', style: 'margin:0 0 8px' }, 'Not linked to a planned session.'),
         h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm btn-primary', onclick: function () { M.pickSession(id); } }, 'Link to a planned session'),
           main ? h('button', { class: 'btn btn-sm needs-edit', onclick: function () {
-            var x = A.activityToPlan(main); if (!x) { TP.toast('This kind of activity has no planner sport (Swim, Run, Bike, Hyrox or Gym).', 'warn'); return; }
+            var x = A.activityToPlan(main, f, type); if (!x) { TP.toast('This kind of activity has no planner sport (Swim, Run, Bike, Hyrox or Gym).', 'warn'); return; }
             var ns = TP.normaliseSession(Object.assign({ id: TP.uid(), date: a.date, block_id: TP.trainingBlockOn(a.date) }, x));
             TP.upsertSession(ns); M.link(ns.id, id); TP.toast('Added to the plan on ' + TP.fmt(a.date, '%a %d %b') + '.');
           } }, TP.icon('plus'), 'Add to the plan') : null)));
@@ -156,6 +159,29 @@
         })))));
       else root.appendChild(h('p', { class: 'muted small' }, 'No similar sessions ' + (cx.inBlock ? 'in this block' : 'in the 12 weeks around it') + ' yet.'));
     }
+  };
+
+  // Save an activity as a template, or add it to the planner on a date (as the R app's Save button).
+  TP.saveActivity = function (rowId, type) {
+    var ctx = TP.garmin.ctx(), a = ctx.byId[rowId]; if (!a) return;
+    var x = A.activityToPlan(a, ctx.feats[rowId], type);
+    if (!x) { TP.toast('This activity type has no matching planner sport (Swim, Run, Bike, Hyrox or Gym).', 'warn'); return; }
+    var name = TP.input('text', (a.name || 'Session') + ' ' + TP.fmt(a.date, '%d %b')), date = TP.input('date', TP.addDays(TP.today(), 1));
+    var m = TP.modal({ size: 'm', stack: true, title: h('div', { class: 'md-t' }, 'Save this session'),
+      body: [h('div', { class: 'panel' }, h('b', null, TP.sportLabel(x.discipline) + ' · ' + x.type), h('div', { class: 'small', style: 'margin-top:4px' }, x.details),
+          h('div', { class: 'hint' }, 'Saved as: ' + (x.total_dist > 0 ? x.total_dist + ' km' : x.duration_min + ' min') + (x.wu_cd_check ? sp(' (warm-up %.1f km, cool-down %.1f km)', x.wu_dist, x.cd_dist) : ''))),
+        TP.field('Template name', name), h('div', { style: 'margin-top:10px' }, TP.field('Or add it to the planner on', date))],
+      footer: [h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Cancel'), h('span', { class: 'grow' }),
+        h('button', { class: 'btn', onclick: function () {
+          var nm = name.value.trim() || x.discipline + ' ' + x.type;
+          TP.state.templates[nm] = Object.assign({ block_id: '' }, x); TP.save(); m.close();
+          TP.toast('Saved “' + nm + '” as a template. Use Load template in any new session form.');
+        } }, TP.icon('bookmark'), 'Save as template'),
+        h('button', { class: 'btn btn-primary', onclick: function () {
+          if (!date.value) return;
+          TP.upsertSession(TP.normaliseSession(Object.assign({ id: TP.uid(), date: date.value, block_id: TP.trainingBlockOn(date.value) }, x))); m.close();
+          TP.toast('Added ' + TP.sportLabel(x.discipline) + ' ' + x.type + ' to the planner on ' + TP.fmt(date.value, '%a %d %b %Y') + '.');
+        } }, TP.icon('plus'), 'Add to planner')] });
   };
 
   // Warm-up / sets / cool-down table and splits.

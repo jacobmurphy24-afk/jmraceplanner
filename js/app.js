@@ -37,6 +37,16 @@
       body: [
         h('div', { class: 'form-section' }, 'Distance units'), units,
         h('p', { class: 'hint' }, 'Changes every distance, pace and speed shown. Your plan isn\u2019t changed, so you can switch back at any time.'),
+        h('div', { class: 'form-section' }, 'Garmin analysis'),
+        h('p', { class: 'small' }, 'Training stress, zones and predictions use your thresholds, estimated from your activities unless you enter tested values.'),
+        h('div', { class: 'btn-row' },
+          h('button', { class: 'btn btn-sm', onclick: function () {
+            var b = h('div'); TP.coach.thresholds(b);
+            var t = TP.modal({ size: 'l', stack: true, cls: 'gloss', title: h('div', { class: 'md-t' }, 'Training thresholds'), body: b, footer: h('button', { class: 'btn btn-primary', onclick: function () { t.close(); } }, 'Done') });
+          } }, TP.icon('heart'), 'Training thresholds'),
+          TP.garmin && TP.garmin.acts.length ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
+            TP.confirm('Delete the ' + TP.garmin.acts.length + ' Garmin activities and sleep data stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { TP.garmin.clearActs(); m.close(); });
+          } }, TP.icon('trash'), 'Clear stored Garmin activities') : null),
         h('div', { class: 'form-section' }, 'Start again'),
         h('p', { class: 'small' }, 'Your plan is saved automatically in this browser. Use Save plan first if you want a copy.'),
         h('button', { class: 'btn btn-outline-danger', onclick: function () {

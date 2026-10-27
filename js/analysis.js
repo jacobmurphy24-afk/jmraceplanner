@@ -1866,7 +1866,9 @@
       else if (sp.verdict === 'Declined') watch.push(sprintf('%s markers are down %.1f%% so far: check sleep, fatigue and whether key sessions are landing.', sp.sport, -sp.change));
     });
     var next7 = fut.filter(function (s) { return s.date <= addDays(to, 7); });
-    return { empty: false, start: start, race_date: race, to: to, discs: discs, load: load, weekly: Object.keys(weekly).map(function (k) { return weekly[k]; }), rate: rate,
+    var fams = A.sessionFamilies(sb, ctx.feats);
+    si.forEach(function (x) { x.families = fams.families.filter(function (f) { return f.sport === x.sport; }); });
+    return { empty: false, start: start, race_date: race, to: to, discs: discs, load: load, sessions: sb, families: fams, train: { acts: acts }, weekly: Object.keys(weekly).map(function (k) { return weekly[k]; }), rate: rate,
       ctl0: ctl0, now: now, ramp: ramp, acwr: acwr, race_proj: raceRow, h_done: hDone, h_plan: hPlan, sessions_done: acts.length, dist: dist, recovery: recov,
       sport_impact: si, good: good, watch: watch, next7: next7.length ? { n: next7.length, h: sum(col(next7, 'h')), tss: sum(col(next7, 'tss')) } : null };
   };
@@ -1875,24 +1877,37 @@
   // Garmin -> planner: a planned session from a done activity
   // ===========================================================================
   var PLAN_TYPE = {
-    Run: { Intervals: 'Intervals', Threshold: 'Tempo', 'Long endurance': 'Long', Endurance: 'Easy', Recovery: 'Recovery' },
-    Bike: { Intervals: 'Intervals', Threshold: 'Sweet spot', 'Long endurance': 'Long', Endurance: 'Endurance', Recovery: 'Recovery' },
-    Swim: { Intervals: 'Speed', Threshold: 'Tempo', 'Long endurance': 'Endurance', Endurance: 'Endurance', Recovery: 'Recovery' } };
-  A.activityToPlan = function (a) {
-    var key = String(a.type_key || '').toLowerCase(), disc = a.discipline, type = a.intensity >= 0.9 ? 'Threshold' : a.hours >= 1.75 ? 'Long endurance' : a.intensity < 0.65 ? 'Recovery' : 'Endurance';
-    if (a.z3 >= 600) type = 'Intervals';
-    var pd, pt;
+    Run: { Intervals: 'Intervals', Speed: 'Intervals', Threshold: 'Tempo', Tempo: 'Tempo', 'Grey zone': 'Tempo', Mixed: 'Fartlek', 'Long endurance': 'Long', Endurance: 'Easy', Short: 'Easy', Recovery: 'Recovery' },
+    Bike: { Intervals: 'Intervals', Speed: 'Intervals', Threshold: 'Sweet spot', Tempo: 'Tempo', 'Grey zone': 'Tempo', Mixed: 'Intervals', 'Long endurance': 'Long', Endurance: 'Endurance', Short: 'Endurance', Recovery: 'Recovery' },
+    Swim: { Intervals: 'Speed', Speed: 'Speed', Threshold: 'Tempo', Tempo: 'Tempo', 'Grey zone': 'Endurance', Mixed: 'Mixed', 'Long endurance': 'Endurance', Endurance: 'Endurance', Short: 'Technique', Recovery: 'Recovery' } };
+  // Session type when no block breakdown has classified the activity.
+  A.activityType = function (a, f) {
+    var s = (f || {}).structure || {};
+    return (s.n_work || 0) >= 2 ? 'Intervals' : a.intensity >= 0.9 ? 'Threshold' : a.hours >= 1.75 ? 'Long endurance' : a.intensity < 0.65 ? 'Recovery' : 'Endurance';
+  };
+  // One planner session from a done activity (warm-up and cool-down from its structure), or null when the
+  // activity isn't something the planner schedules (walks, team sports...).
+  A.activityToPlan = function (a, f, type) {
+    var key = String(a.type_key || '').toLowerCase(), s = (f || {}).structure || {}, disc = a.discipline, pd, pt;
+    type = type || A.activityType(a, f);
     if (disc === 'Run' || disc === 'Bike' || disc === 'Swim') {
-      pt = PLAN_TYPE[disc][type] || 'Endurance';
+      pt = PLAN_TYPE[disc][type] || 'Other';
       if (disc === 'Swim' && a.swim_env === 'Open water') pt = 'Open water';
       pd = disc === 'Bike' ? (/virtual|indoor|trainer/.test(key) ? 'Indoor Bike' : 'Outdoor Bike') : disc;
     } else if (/strength/.test(key)) { pd = 'Gym'; pt = 'Strength'; }
     else if (/row|ski/.test(key)) { pd = 'Hyrox'; pt = 'Erg intervals'; }
     else if (/hiit|hyrox|cardio|fitness/.test(key)) { pd = 'Hyrox'; pt = 'Simulation'; }
     else return null;
-    var km = Math.round((a.km || 0) * (disc === 'Swim' ? 100 : 10)) / (disc === 'Swim' ? 100 : 10), mins = Math.round((a.moving_s || 0) / 60);
-    var bits = [mins ? mins + ' min' : null, fin(a.avg_hr) ? 'avg HR ' + Math.round(a.avg_hr) : null, disc === 'Bike' && fin(a.np) ? Math.round(a.np) + ' W NP' : null].filter(Boolean);
+    var km = or(a.km, (a.distance_m || 0) / 1000) || 0, dp = disc === 'Swim' ? 100 : 10;
+    km = Math.round(km * dp) / dp;
+    var segKm = function (k) { return Math.round(sum((s.segments || []).filter(function (g) { return g.kind === k; }).map(function (g) { return g.dist; })) / 10) / 100; };
+    var wu = segKm('Warm-up'), cd = segKm('Cool-down');
+    if (wu + cd >= km) { wu = 0; cd = 0; }
+    var mins = Math.round((a.moving_s || 0) / 60);
+    var bits = [s.label || null, mins > 0 ? mins + ' min' : null, fin(a.avg_hr) ? 'avg HR ' + Math.round(a.avg_hr) : null, disc === 'Bike' && fin(a.np) ? Math.round(a.np) + ' W NP' : null].filter(Boolean);
+    var byTime = pd === 'Gym' || pd === 'Hyrox' || km === 0;
     return { discipline: pd, type: pt, details: 'From Garmin: ' + (a.name || 'activity') + ' (' + TP.fmt(a.date, '%d %b %Y') + '). ' + bits.join(' · ') + '.',
-      total_dist: km, num_sets: 1, main_dist_1: km, plan_by: pd === 'Gym' || pd === 'Hyrox' || !km ? 'Time' : 'Distance', duration_min: pd === 'Gym' || pd === 'Hyrox' || !km ? mins : null };
+      wu_cd_check: wu + cd > 0, wu_dist: wu, cd_dist: cd, total_dist: km, num_sets: 1, main_dist_1: Math.max(0, Math.round((km - wu - cd) * 100) / 100),
+      main_dist_2: 0, main_dist_3: 0, main_dist_4: 0, main_dist_5: 0, plan_by: byTime ? 'Time' : 'Distance', duration_min: byTime ? mins : null };
   };
 })(window.TP);
