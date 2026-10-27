@@ -206,7 +206,43 @@
     });
   };
   C.signIn = function (email, password) { return F.signInWithEmailAndPassword(auth, email.trim(), password); };
-  C.signOut = function () { return F.signOut(auth); };
+  // Signing out also removes this account's data from the device: its Garmin activities and key, and
+  // the offline copy of its plans. The page then reloads, so the next sign-in starts clean.
+  C.signOut = function (force) {
+    if (!C.synced && !force) {
+      TP.confirm('Some changes haven’t uploaded yet (you may be offline). Signing out deletes this device’s copy of your plans, so those changes would be lost.', 'Sign out anyway', function () { C.signOut(true); });
+      return Promise.resolve();
+    }
+    return forgetDevice().then(function () { return F.signOut(auth); }).then(clearCache).then(function () { location.reload(); });
+  };
+  function forgetDevice() {
+    if (C.user) localStorage.removeItem(activeKey());
+    return TP.garmin ? TP.garmin.wipeDevice().catch(function (e) { console.warn('garmin wipe', e); }) : Promise.resolve();
+  }
+  // Firestore's offline copy can only be cleared once it's shut down (and not while another tab uses it).
+  function clearCache() {
+    stopAll();
+    return F.terminate(db).then(function () { return F.clearIndexedDbPersistence(db); }).catch(function (e) { console.warn('clear offline copy', e); });
+  }
+  // Deleting the account: plans you own (with their contents) go, you leave plans shared with you and
+  // turn down pending invites, then your profile and private data are deleted, then the sign-in itself.
+  // Firebase only deletes a sign-in that's just been used, so the password is checked again first.
+  C.ownedPlans = function () { return C.plans.filter(function (p) { return p.roles && p.roles[C.user.uid] === 'owner'; }); };
+  C.deleteAccount = function (password) {
+    var u = auth.currentUser, uid = C.user.uid;
+    return F.reauthenticateWithCredential(u, F.EmailAuthProvider.credential(u.email, password)).then(function () {
+      var owned = C.ownedPlans(), shared = C.plans.filter(function (p) { return owned.indexOf(p) < 0; }), invites = C.invites.slice();
+      return owned.reduce(function (p, x) { return p.then(function () { return C.deletePlan(x.id); }); }, Promise.resolve())
+        .then(function () { return Promise.all(shared.map(function (x) { return C.leave(x.id); }).concat(invites.map(function (x) { return C.decline(x.id); }))); });
+    }).then(function () {
+      return F.getDocs(F.collection(db, 'users', uid, 'garmin'));
+    }).then(function (snap) {
+      var b = F.writeBatch(db);
+      snap.docs.forEach(function (d) { b.delete(d.ref); });
+      b.delete(F.doc(db, 'users', uid));
+      return b.commit();
+    }).then(forgetDevice).then(function () { return F.deleteUser(u); }).then(clearCache).then(function () { location.reload(); });
+  };
   C.resetPassword = function (email) { return F.sendPasswordResetEmail(auth, email.trim()); };
   C.resendVerification = function () { return F.sendEmailVerification(auth.currentUser); };
   // After clicking the link in the email: refresh the account so invites appear.

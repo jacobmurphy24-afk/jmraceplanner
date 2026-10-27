@@ -17,14 +17,16 @@
   // --- Storage on this device (IndexedDB) ---
   // acts: activity summaries · streams: second-by-second data · feats: analysis features · wellness: sleep / HRV by date
   var STORES = ['acts', 'streams', 'feats', 'wellness'];
-  var dbp = null;
+  var dbp = null, wiped = false;
   function db() {
+    if (wiped) return Promise.reject(new Error('Garmin data has been removed from this device.'));
     if (!dbp) dbp = new Promise(function (res, rej) {
       var r = indexedDB.open(dbName(), 2);
       r.onupgradeneeded = function () {
         STORES.forEach(function (s) { if (!r.result.objectStoreNames.contains(s)) r.result.createObjectStore(s, { keyPath: s === 'wellness' ? 'date' : 'id' }); });
       };
-      r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); };
+      // Let go when the database is being deleted (signing out), so the delete isn't blocked.
+      r.onsuccess = function () { var d = r.result; d.onversionchange = function () { d.close(); }; res(d); }; r.onerror = function () { rej(r.error); };
     });
     return dbp;
   }
@@ -39,11 +41,38 @@
   G.stream = function (id) { return tx('streams', 'readonly', function (s) { return s.get(id); }); };
   // Called when someone signs in or out (or at start-up without accounts).
   G.setUser = function (id) {
-    uid = id || null; dbp = null; G.acts = []; G.frecs = {}; G.wellness = []; G.loaded = false; G.syncing = null; G.progress = ''; G.prep = null; G.ver++;
+    uid = id || null; dbp = null; wiped = false; G.acts = []; G.frecs = {}; G.wellness = []; G.loaded = false; G.syncing = null; G.progress = ''; G.prep = null; G.ver++;
     if (TP.mine) TP.mine.reset();
     if (TP.cloud && TP.cloud.enabled && !uid) { TP.changed(); return; }
     migrate().then(G.load);
   };
+  // Signing out or deleting the account: remove the signed-in account's key, settings and stored
+  // activities from this device (other accounts that sign in here keep theirs). The data is cleared
+  // first, which always works; deleting the then-empty database can be held up by the browser until
+  // the page closes, so its name is kept and the delete is finished the next time the site opens.
+  var FORGET = 'tp-garmin-forget';
+  G.wipeDevice = function () {
+    var name = dbName(), suffix = uid ? ':' + uid : null;
+    if (suffix) Object.keys(localStorage).forEach(function (k) { if (k.slice(-suffix.length) === suffix && k.indexOf('tp-garmin') === 0) localStorage.removeItem(k); });
+    try { localStorage.setItem(FORGET, JSON.stringify(forgetList().concat([name]))); } catch (e) {}
+    var cleared = Promise.all(STORES.map(function (st) { return tx(st, 'readwrite', function (s) { s.clear(); }); })).catch(function (e) { console.warn('garmin clear', e); });
+    return cleared.then(function () {
+      // Nothing reopens the database between here and the sign-out (which calls setUser).
+      var open = dbp; dbp = null; wiped = true; G.acts = []; G.frecs = {}; G.wellness = [];
+      return open ? open.then(function (d) { d.close(); }, function () {}) : null;
+    }).then(function () { return dropDb(name, 1500); });
+  };
+  function forgetList() { try { return JSON.parse(localStorage.getItem(FORGET) || '[]'); } catch (e) { return []; } }
+  function dropDb(name, wait) {
+    return new Promise(function (res) {
+      var r = indexedDB.deleteDatabase(name);
+      r.onsuccess = function () { try { localStorage.setItem(FORGET, JSON.stringify(forgetList().filter(function (n) { return n !== name; }))); } catch (e) {} res(); };
+      r.onerror = function () { res(); };
+      setTimeout(res, wait);
+    });
+  }
+  // At start-up, before anything opens them: finish deleting databases a sign-out left behind.
+  forgetList().forEach(function (n) { dropDb(n, 0); });
   // Garmin data saved before accounts belonged to "this device": it moves to the first account that signs in here.
   function migrate() {
     if (!uid || !localStorage.getItem(KEY) && !localStorage.getItem(RANGE)) return Promise.resolve();

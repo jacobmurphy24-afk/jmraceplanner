@@ -166,7 +166,7 @@
     var body = h('div');
     var m = TP.modal({ size: 'l', cls: 'plans-modal', title: h('div', { class: 'md-t' }, 'Plans & sharing'), body: body,
       footer: [h('button', { class: 'btn btn-primary', onclick: function () { m.close(); } }, 'Done')], onClose: function () { TP.offChange(draw); } });
-    function draw() { if (!body.isConnected) return; TP.clear(body); body.appendChild(content(m)); }
+    function draw() { if (!body.isConnected) return; if (!C.user) { m.close(); return; } TP.clear(body); body.appendChild(content(m)); }
     TP.onChange(draw); draw();
   };
 
@@ -184,7 +184,7 @@
             footer: [h('button', { class: 'btn', onclick: function () { t.close(); } }, 'Cancel'),
                      h('button', { class: 'btn btn-primary', onclick: function () { if (nm.value.trim()) C.rename(nm.value).then(function () { t.close(); }).catch(fail); } }, 'Save')] });
         } }, 'Edit name'),
-        h('button', { class: 'btn btn-sm', onclick: function () { m.close(); C.signOut(); TP.toast('Signed out.'); } }, 'Sign out')),
+        h('button', { class: 'btn btn-sm', onclick: function () { m.close(); C.signOut(); } }, 'Sign out')),
       u.verified ? null : h('div', { class: 'verify' },
         h('div', null, h('b', null, 'Confirm your email. '), 'We sent a link to ' + u.email + '. You need to confirm it before you can join plans shared with you.'),
         h('div', { class: 'btn-row' },
@@ -220,7 +220,36 @@
 
     // The open plan's people
     if (C.isActive()) out.appendChild(sharing(m));
+
+    out.appendChild(h('div', { class: 'form-section' }, 'Delete your account'));
+    out.appendChild(h('p', { class: 'small' }, 'Deletes your account and everything saved with it. Signing out also removes your data from this device, but keeps your account.'));
+    out.appendChild(h('button', { class: 'btn btn-outline-danger', onclick: function () { deleteAccount(m); } }, TP.icon('trash'), 'Delete my account'));
     return out;
+  }
+
+  // Asks for the password again (Firebase needs a fresh sign-in to delete one), says exactly what goes,
+  // and names any plans that other people will lose.
+  function deleteAccount(m) {
+    var pw = TP.input('password', '', { autocomplete: 'current-password' });
+    var owned = C.ownedPlans(), sharedOwned = owned.filter(function (p) { return p.memberIds.length > 1; }), member = C.plans.length - owned.length;
+    var t = TP.modal({ size: 's', stack: true, title: 'Delete your account?',
+      body: [
+        h('p', { class: 'small' }, 'This can’t be undone. It deletes:'),
+        h('ul', { class: 'small' },
+          h('li', null, owned.length ? 'the ' + (owned.length === 1 ? 'plan' : owned.length + ' plans') + ' you own, with all their events, sessions and templates;' : 'your profile (name and email);'),
+          owned.length ? h('li', null, 'your profile (name and email);') : null,
+          h('li', null, 'your block reviews, training thresholds, links between sessions and activities, and consent record;'),
+          h('li', null, 'your Garmin data, API key and offline copy of your plans on this device;'),
+          h('li', null, 'your sign-in, so this email address can’t sign in any more.')),
+        member ? h('p', { class: 'small' }, 'You’ll also leave the ' + (member === 1 ? 'plan' : member + ' plans') + ' other people shared with you. Their plans aren’t changed otherwise.') : null,
+        sharedOwned.length ? h('p', { class: 'small' }, h('b', null, 'Other people will lose access to: '), sharedOwned.map(function (p) { return '“' + p.name + '”'; }).join(', ') + '. Use Save plan first if anyone needs a copy.') : null,
+        h('p', { class: 'small muted' }, 'If you’ve used Garmin analysis on other devices, sign out there first to remove it, or clear the site’s data in those browsers afterwards. Nothing on your Garmin account is changed.'),
+        TP.field('Enter your password to confirm', pw)],
+      footer: [h('button', { class: 'btn', onclick: function () { t.close(); } }, 'Cancel'),
+               h('button', { class: 'btn btn-danger', onclick: function () {
+                 if (!pw.value) { TP.toast('Enter your password to confirm.', 'warn'); return; }
+                 busy(this, C.deleteAccount(pw.value)).catch(fail);
+               } }, 'Delete my account')] });
   }
 
   function planRow(name, sub, on, open) {
