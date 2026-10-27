@@ -97,7 +97,10 @@
     TP.state = TP.normalise({ prefs: TP.state.prefs });
     COLLS.forEach(function (coll) {
       unsubContent.push(F.onSnapshot(F.collection(db, 'plans', id, coll), { includeMetadataChanges: true }, function (snap) {
-        snap.docChanges().forEach(function (ch) {
+        // A snapshot that changes nothing on screen (only the device cache catching up) doesn't redraw,
+        // so the page isn't rebuilt under your finger while you scroll.
+        var changes = snap.docChanges(), wasSynced = C.synced, wasLoaded = loaded[coll];
+        changes.forEach(function (ch) {
           var d = ch.doc.data(), key = coll === 'templates' ? d._name : ch.doc.id;
           if (ch.type === 'removed') { delete baseline[coll][ch.doc.id]; remove(coll, key); return; }
           var obj = Object.assign({}, d); delete obj._name;
@@ -107,6 +110,7 @@
         });
         loaded[coll] = true;
         C.synced = !snap.metadata.hasPendingWrites;
+        if (!changes.length && wasLoaded && wasSynced === C.synced) return;
         TP.state = TP.normalise(TP.state);
         TP.changed();
       }, function (e) {

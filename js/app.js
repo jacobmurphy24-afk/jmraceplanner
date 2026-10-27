@@ -2,8 +2,13 @@
 (function (TP) {
   var h = TP.h;
 
+  var SIDEWAYS = '.tabs-scroll, .tbl-wrap, .rp-timeline-wrap, .tabs, .chips';
   TP.render = function () {
     if (TP.renderGate()) return;
+    // Rows scrolled sideways (tab bars, wide tables) keep their place when the page redraws,
+    // e.g. when synced data arrives while you're scrolling the tabs on a phone.
+    var sideways = {}, keyOf = function (el, seen) { var k = el.className; seen[k] = (seen[k] || 0) + 1; return k + '#' + seen[k]; };
+    var seen0 = {}; document.querySelectorAll(SIDEWAYS.replace(/(^|, )/g, '$1#main ')).forEach(function (el) { var k = keyOf(el, seen0); if (el.scrollLeft) sideways[k] = el.scrollLeft; });
     var v = TP.view, main = TP.clear(document.getElementById('main'));
     document.querySelectorAll('button[data-page]').forEach(function (b) { b.classList.toggle('on', b.dataset.page === v.page); b.setAttribute('aria-current', b.dataset.page === v.page ? 'page' : 'false'); });
     document.querySelectorAll('button[data-mode]').forEach(function (b) { b.classList.toggle('on', b.dataset.mode === v.mode); });
@@ -24,6 +29,9 @@
     }
     var sd = TP.clear(document.getElementById('side-day')); TP.renderDay(sd);
     TP.renderAccount();
+    if (Object.keys(sideways).length) {
+      var seen1 = {}; main.querySelectorAll(SIDEWAYS).forEach(function (el) { var k = keyOf(el, seen1); if (sideways[k]) el.scrollLeft = sideways[k]; });
+    }
   };
 
 

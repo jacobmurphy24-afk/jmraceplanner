@@ -389,10 +389,30 @@ tr.click { cursor: pointer; } tr.click:hover td { background: #f7f8ff; }
 .sess-card { border: 1px solid var(--rule); border-left: 4px solid; padding: 8px 11px; margin: 8px 0; cursor: pointer; } .sess-card:hover { background: #f7f8ff; }
 .tchip { font-size: 0.64rem; font-weight: 800; text-transform: uppercase; white-space: nowrap; }
 .check-row { display: flex; gap: 12px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--rule2); }
-.race-head { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.legs { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
-.leg { flex: 1 1 200px; border: 1px solid var(--rule); border-top: 4px solid; padding: 10px 12px; }
-.leg .big { font-size: 1.4rem; } .tleg { flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.78rem; color: var(--muted); }
+/* Race tab: finish time, the race as one bar, then a card per leg */
+.race-hero { margin-bottom: 12px; }
+.race-time { font-size: 2.4rem; font-weight: 800; line-height: 1.05; letter-spacing: -0.01em; }
+.race-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 4px; }
+.race-pill { display: inline-block; border: 1.5px solid; padding: 2px 8px; font-size: 0.8rem; font-weight: 700; background: #fff; }
+.race-bar { display: flex; height: 26px; gap: 2px; margin: 4px 0 14px; }
+.race-bar-seg { min-width: 3px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.race-bar-seg span { color: #fff; font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+.legs { display: grid; grid-template-columns: minmax(0, 1fr) 58px minmax(0, 1fr) 58px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.legs:has(> .leg:only-child) { grid-template-columns: minmax(0, 1fr); }
+.leg { border: 1px solid var(--rule); border-left: 5px solid; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.leg-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.leg-name { font-weight: 700; } .leg-time { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.leg-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; }
+.leg-stat b { display: block; font-size: 0.95rem; font-variant-numeric: tabular-nums; } .leg-stat span { font-size: 0.72rem; color: var(--muted); }
+.leg .race-pill { align-self: flex-start; }
+.leg-pacing { color: #333; }
+.leg-how summary { font-size: 0.76rem; color: var(--accent-d); cursor: pointer; } .leg-how p { font-size: 0.78rem; color: var(--muted); margin: 4px 0 0; }
+.tleg { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.76rem; color: var(--muted); } .tleg b { color: var(--ink); }
+@media (max-width: 900px) {
+  .legs { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .tleg { flex-direction: row; gap: 8px; padding: 6px 0; } .tleg::before, .tleg::after { content: ''; flex: 1; border-top: 1px dashed var(--rule); }
+  .race-time { font-size: 2rem; }
+}
 .implied { background: var(--soft); border: 1px solid #aab8ff; padding: 9px 12px; margin-top: 10px; font-size: 0.84rem; }
 
 
@@ -634,3 +654,9 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
 .doc th { background: var(--rule2); }
 .doc .todo { background: #fff3c4; padding: 0 3px; }
 .doc .updated { color: var(--muted); font-size: 0.88rem; }
+/* Phones: page tabs (block review, report) as a grid of buttons, all visible, no sideways scrolling */
+@media (max-width: 760px) {
+  .tabs.tabs-scroll { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; overflow: visible; border-bottom: none; }
+  .tabs.tabs-scroll .chip { justify-content: center; text-align: center; white-space: normal; line-height: 1.15; padding: 6px 4px; font-size: 0.78rem; border: 1px solid var(--rule); margin: 0; color: #333; }
+  .tabs.tabs-scroll .chip.on { background: var(--ink); border-color: var(--ink); color: #fff; }
+}

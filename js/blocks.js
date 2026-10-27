@@ -282,24 +282,49 @@
     if (!r.legs) { box.appendChild(h('p', { class: 'muted' }, r.upcoming ? 'The race hasn’t happened yet. Come back after race day and sync.' : 'No race activity found on race day. Edit this review to pick it, or sync the race.')); return; }
     var prof = r.prof_pre, rs = r.race_summary;
     var pct = function (x) { return !fin(x) ? null : Math.abs(x - 1) < 0.01 ? 'right on prediction' : sp('%.1f%% %s than predicted', Math.abs(x - 1) * 100, x > 1 ? 'faster' : 'slower'); };
-    box.appendChild(h('div', { class: 'race-head' },
-      h('div', null, h('div', { class: 'lbl' }, 'Finish time'), h('div', { class: 'big' }, A.fmtDur(rs.time_s)), rs.transition_s > 0 ? h('div', { class: 'muted small' }, 'including ' + A.fmtDur(rs.transition_s) + ' in transitions') : null),
-      h('div', { class: 'right' }, fin(rs.display_ratio) || fin(rs.perf_ratio) ? h('div', { class: 'strong' }, 'Overall: ' + pct(fin(rs.display_ratio) ? rs.display_ratio : rs.perf_ratio) + (fin(rs.predicted_s) ? ' (predicted ' + A.fmtDur(rs.predicted_s) + ')' : '')) : null,
-        fin(rs.goal_delta) ? h('div', { class: 'strong', style: 'color:' + (rs.goal_delta <= 0 ? '#00a86b' : '#d99a00') }, 'Goal ' + A.fmtDur(rs.goal_s) + ': ' + A.fmtDur(Math.abs(rs.goal_delta)) + (rs.goal_delta <= 0 ? ' under' : ' over')) : null)));
-    var cards = h('div', { class: 'legs' }), tr = r.transitions || [];
+    var verdictCol = function (x) { return !fin(x) ? '#666' : x >= 0.99 ? '#00a86b' : x >= 0.95 ? '#d99a00' : '#ff3b30'; };
+    var overall = fin(rs.display_ratio) ? rs.display_ratio : rs.perf_ratio, tr = r.transitions || [];
+    // Finish time and the overall verdict.
+    box.appendChild(h('div', { class: 'race-hero' },
+      h('div', { class: 'lbl' }, 'Finish time'), h('div', { class: 'race-time' }, A.fmtDur(rs.time_s)),
+      h('div', { class: 'race-pills' },
+        fin(overall) ? h('span', { class: 'race-pill', style: 'color:' + verdictCol(overall) + ';border-color:' + verdictCol(overall) }, pct(overall)) : null,
+        fin(rs.predicted_s) ? h('span', { class: 'muted small' }, 'predicted ' + A.fmtDur(rs.predicted_s)) : null,
+        fin(rs.goal_delta) ? h('span', { class: 'race-pill', style: 'color:' + (rs.goal_delta <= 0 ? '#00a86b' : '#d99a00') + ';border-color:' + (rs.goal_delta <= 0 ? '#00a86b' : '#d99a00') },
+          'Goal ' + A.fmtDur(rs.goal_s) + ': ' + A.fmtDur(Math.abs(rs.goal_delta)) + (rs.goal_delta <= 0 ? ' under' : ' over')) : null),
+      rs.transition_s > 0 ? h('div', { class: 'muted small' }, 'Including ' + A.fmtDur(rs.transition_s) + ' in transitions') : null));
+    // The race as one bar: each leg (and transition) as its share of the finish time.
+    var parts = [];
+    r.legs.forEach(function (l, k) {
+      var a = l.act, t = fin(a.race_s) ? a.race_s : a.moving_s;
+      parts.push({ label: a.discipline, t: t, col: A.SPORT_COLOURS[a.discipline] || '#585858' });
+      if (tr[k] && k < r.legs.length - 1) parts.push({ label: tr[k].label, t: tr[k].seconds, col: '#bdbdbd', tr: true });
+    });
+    var tot = parts.reduce(function (x, p) { return x + (p.t || 0); }, 0);
+    if (r.legs.length > 1 && tot > 0) box.appendChild(h('div', { class: 'race-bar' }, parts.map(function (p) {
+      return h('div', { class: 'race-bar-seg' + (p.tr ? ' tr' : ''), style: 'flex-grow:' + Math.max(p.t, 1) + ';background:' + p.col, title: p.label + ' ' + A.fmtDur(p.t) },
+        !p.tr && p.t / tot > 0.08 ? h('span', null, p.label) : null);
+    })));
+    // One card per leg, with the transition between them as a thin row.
+    var cards = h('div', { class: 'legs' });
     r.legs.forEach(function (l, k) {
       var a = l.act, e = l.exp, s = l.stream, t = fin(a.race_s) ? a.race_s : a.moving_s, col = A.SPORT_COLOURS[a.discipline] || '#585858';
-      var pace = a.discipline === 'Bike' && fin(a.np) ? sp('%.0f W normalised · %.1f km/h', a.np, a.km / Math.max(t / 3600, 0.01)) : a.discipline === 'Bike' ? sp('%.1f km/h', a.km / Math.max(t / 3600, 0.01))
-        : a.discipline === 'Run' ? A.fmtPace(t / Math.max(a.km, 0.01)) + ' /km' : a.discipline === 'Swim' && a.km > 0 ? A.fmtPace(t / (a.km * 10)) + ' /100 m' + (a.swim_env === 'Open water' ? ' · open water' : ' · pool') : '';
+      var speed = a.discipline === 'Bike' ? sp('%.1f km/h', a.km / Math.max(t / 3600, 0.01)) : a.discipline === 'Run' ? A.fmtPace(t / Math.max(a.km, 0.01)) + ' /km'
+        : a.discipline === 'Swim' && a.km > 0 ? A.fmtPace(t / (a.km * 10)) + ' /100 m' : '';
       var pacing = !s || !fin(s.split_pct) ? null : s.split_pct < -5 ? sp('Faded %.0f%% in the second half', -s.split_pct) : fin(s.fade_pct) && s.fade_pct < -3 ? sp('Even halves, faded %.0f%% in the last quarter', -s.fade_pct) : s.split_pct > 3 ? sp('Negative split: %.0f%% stronger in the second half', s.split_pct) : 'Evenly paced';
       var ratio = e ? (fin(e.display_ratio) ? e.display_ratio : e.ratio) : null;
-      cards.appendChild(h('div', { class: 'leg', style: 'border-top-color:' + col },
-        h('b', null, a.discipline), h('div', { class: 'big' }, A.fmtDur(t)), h('div', { class: 'muted small' }, sp('%.2f km · ', a.km) + pace),
-        e ? h('div', { class: 'small strong', style: 'margin-top:6px;color:' + (ratio >= 0.99 ? '#00a86b' : ratio >= 0.95 ? '#d99a00' : '#ff3b30') }, pct(ratio) + (e.kind === 'time' ? ' (predicted ' + A.fmtDur(e.expected) + ')' : sp(' (expected %.0f W)', e.expected))) : null,
-        pacing ? h('div', { class: 'small' }, pacing) : null,
-        fin(a.avg_hr) ? h('div', { class: 'hint' }, sp('Avg HR %.0f (%.0f%% of threshold)', a.avg_hr, a.avg_hr / prof.lthr * 100)) : null,
-        e ? h('div', { class: 'hint' }, 'Prediction: ' + e.basis + '.') : null));
-      if (tr[k] && k < r.legs.length - 1) cards.appendChild(h('div', { class: 'tleg' }, '→', h('b', null, tr[k].label), A.fmtDur(tr[k].seconds)));
+      var stat = function (v, l) { return v ? h('div', { class: 'leg-stat' }, h('b', null, v), h('span', null, l)) : null; };
+      cards.appendChild(h('div', { class: 'leg', style: 'border-left-color:' + col },
+        h('div', { class: 'leg-top' }, h('span', { class: 'leg-name' }, a.discipline + (a.discipline === 'Swim' && a.km > 0 ? (a.swim_env === 'Open water' ? ' · open water' : ' · pool') : '')), h('span', { class: 'leg-time' }, A.fmtDur(t))),
+        h('div', { class: 'leg-stats' },
+          stat(a.km > 0 ? sp('%.2f km', a.km) : null, 'distance'), stat(speed, a.discipline === 'Bike' ? 'speed' : 'pace'),
+          stat(a.discipline === 'Bike' && fin(a.np) ? sp('%.0f W', a.np) : null, 'normalised power'),
+          stat(fin(a.avg_hr) ? sp('%.0f', a.avg_hr) : null, sp('avg HR · %.0f%% of threshold', a.avg_hr / prof.lthr * 100))),
+        e ? h('div', { class: 'race-pill', style: 'color:' + verdictCol(ratio) + ';border-color:' + verdictCol(ratio) },
+          pct(ratio) + (e.kind === 'time' ? ' · predicted ' + A.fmtDur(e.expected) : sp(' · expected %.0f W', e.expected))) : null,
+        pacing ? h('div', { class: 'small leg-pacing' }, pacing) : null,
+        e ? h('details', { class: 'leg-how' }, h('summary', null, 'How this was predicted'), h('p', null, e.basis + '.')) : null));
+      if (tr[k] && k < r.legs.length - 1) cards.appendChild(h('div', { class: 'tleg' }, h('span', null, tr[k].label), h('b', null, A.fmtDur(tr[k].seconds))));
     });
     box.appendChild(cards);
     box.appendChild(h('div', { class: 'form-section' }, 'Pacing through each leg'));
