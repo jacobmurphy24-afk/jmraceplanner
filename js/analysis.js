@@ -855,6 +855,20 @@
     return out;
   };
 
+  // Fitness over a block from its own activities only: starting fitness is the average daily training load of
+  // the block's first four weeks (what fitness means: ~6 weeks of load), then CTL is followed to its peak
+  // before the race. Of the block-only measures tried, this came closest to full-history results.
+  A.blockFitness = function (scored, start, end) {
+    var tss = {}, n = Math.max(1, Math.min(28, days(start, end)));
+    scored.forEach(function (a) { if (a.date >= start && a.date < end) tss[a.date] = (tss[a.date] || 0) + (a.tss || 0); });
+    var seed = 0, d, k;
+    for (d = start, k = 0; k < n; d = addDays(d, 1), k++) seed += tss[d] || 0;
+    seed /= n;
+    var c = seed, peak = seed, peakDate = start;
+    for (d = start; d < end; d = addDays(d, 1)) { c += ((tss[d] || 0) - c) / 42; if (c > peak) { peak = c; peakDate = d; } }
+    return { start: seed, peak: peak, peak_date: peakDate, gain: seed > 5 ? (peak / seed - 1) * 100 : peak > 20 ? 40 : 0 };
+  };
+
   A.weekly = function (acts, load) {
     if (!acts.length) return [];
     var w = {}, get = function (k) { return w[k] = w[k] || { week: k, long_run_km: null, long_ride_h: null, key_sessions: 0, sessions: 0, hours: 0, km: 0, tss: 0, z1: 0, z2: 0, z3: 0, load: null, monotony: null, strain: null }; };
@@ -1254,11 +1268,11 @@
     var pre = load.filter(function (d) { return d.date < race; });
     var ctl0 = load[0].ctl, peakRow = pre.length ? pre.reduce(function (a, b) { return b.ctl > a.ctl ? b : a; }) : load[0], ctlPeak = peakRow.ctl;
     var ctlRace = pre.length ? pre[pre.length - 1].ctl : ctl0, tsbRace = load[load.length - 1].tsb;
-    var gain = ctl0 > 5 ? (ctlPeak / ctl0 - 1) * 100 : ctlPeak > 20 ? 40 : 0, comp = {};
-    // Fitness gain needs ~4 months of data before the block to know where fitness started: with less, the
-    // starting fitness is an estimate that can be 20+ points out (checked against full-history results).
-    var shortHist = !!ctx.historyStart && ctx.historyStart > addDays(start, -120);
-    comp.fitness = shortHist ? null : clamp(40 + 2.4 * gain);
+    var comp = {};
+    // Fitness gain from the block alone (start to end), so it doesn't depend on what was synced before it.
+    var fit = A.blockFitness(scored, start, race);
+    out.fitness = fit;
+    comp.fitness = clamp(40 + 2.4 * fit.gain);
     var wk = train.weekly, weeksOk = wk.length ? wk.filter(function (w) { return w.sessions >= 3; }).length / wk.length : 0;
     var ud = Object.keys(by(acts, 'date')).sort(), longGaps = 0;
     for (i = 1; i < ud.length; i++) if (days(ud[i - 1], ud[i]) > 7) longGaps++;
@@ -1291,7 +1305,7 @@
     var redS = !fin(taperRed) ? 50 : taperRed >= 30 && taperRed <= 60 ? 100 : taperRed > 60 ? 70 : taperRed >= 15 ? 65 : 35;
     comp.taper = clamp(0.5 * tsbS + 0.5 * redS - (z3T < 300 ? 10 : 0));
     out.taper = { ctl_peak: ctlPeak, peak_date: peakRow.date, ctl_race: ctlRace, atl_race: pre.length ? pre[pre.length - 1].atl : null, tsb_race: tsbRace,
-      taper_days: days(peakRow.date, race), reduction: taperRed, z3_min: z3T / 60, last14_wk: last14, prior21_wk: prior21, ctl0: ctl0, gain_pct: gain };
+      taper_days: days(peakRow.date, race), reduction: taperRed, z3_min: z3T / 60, last14_wk: last14, prior21_wk: prior21, ctl0: ctl0 };
     out.recovery = A.recovery(ctx.wellness, load, start, race);
     comp.recovery = out.recovery ? out.recovery.score : null;
     out.sessions = sessionBreakdown(acts, load, ctx.wellness, discs, race, review.sport, raceRows, feats, prof);
@@ -1299,9 +1313,6 @@
     out.families = A.sessionFamilies(out.sessions, feats);
     out.sport_impact = sportImpact(acts, scored, feats, discs, start, race, out.sessions, raceH);
     out.sport_impact.forEach(function (sp) { sp.families = out.families.families.filter(function (f) { return f.sport === sp.sport; }); });
-    // Fitness and load are only judged reliably with ~6 weeks of Garmin data before the block.
-    out.history_from = ctx.historyStart || null;
-    out.short_history = shortHist;
     var W = { fitness: 0.2, consistency: 0.15, load_safety: 0.1, intensity: 0.15, specificity: 0.1, taper: 0.2, recovery: 0.1 }, tw = 0, ts = 0;
     out.components = {};
     Object.keys(W).forEach(function (k) { out.components[k] = comp[k]; if (fin(comp[k])) { ts += comp[k] * W[k]; tw += W[k]; } });
@@ -1359,9 +1370,9 @@
 
   function blockFindings(b) {
     var good = [], change = [], c = b.components, tp = b.taper;
-    if (!fin(c.fitness)) change.push(sprintf('Your Garmin data starts %s, so where fitness began this block can’t be measured. Sync from %s (4 months before the block) for the fitness gain and a fuller review.', TP.fmt(b.history_from, '%d %b %Y'), TP.fmt(addDays(b.start, -120), '%d %b %Y')));
-    else if (c.fitness >= 75) good.push(sprintf('Fitness rose %.0f%% (CTL %.0f → %.0f peak) - the block delivered a real training stimulus.', tp.gain_pct, tp.ctl0, tp.ctl_peak));
-    else change.push(sprintf('Fitness only rose %.0f%% (CTL %.0f → %.0f). Next block: progress load by 3-5 CTL per week through the build phase.', tp.gain_pct, tp.ctl0, tp.ctl_peak));
+    var fz = b.fitness;
+    if (c.fitness >= 75) good.push(sprintf('Fitness rose %.0f%% over the block (%.0f → %.0f at its peak) - the block delivered a real training stimulus.', fz.gain, fz.start, fz.peak));
+    else change.push(sprintf('Fitness only rose %.0f%% over the block (%.0f → %.0f). Next block: progress load by 3-5 CTL per week through the build phase.', fz.gain, fz.start, fz.peak));
     if (c.consistency >= 80) good.push('Training was consistent week to week, the single biggest driver of endurance gains.');
     else change.push('Consistency was the limiter - missed weeks or breaks of more than a week. Plan for realistic weekly availability before adding intensity.');
     if (c.load_safety < 70) change.push('Load spiked too sharply at times (ACWR > 1.5, ramp > 8 CTL/week or monotony > 2). Smooth increases and keep a genuine easy day each week.');
