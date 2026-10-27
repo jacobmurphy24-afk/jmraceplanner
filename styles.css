@@ -581,3 +581,5 @@ th.sortable { cursor: pointer; user-select: none; } th.sortable:hover { color: v
 .cbar-n { font-size: 0.7rem; color: var(--faint); margin-top: 2px; }
 
 .tc .ax-l { font-size: 10px; fill: #777; font-weight: 700; }
+
+.rp-page-head { border-left-width: 6px; margin-bottom: 14px; align-items: flex-end; } .rp-page-head h2 { font-size: 1.4rem; margin: 2px 0; }

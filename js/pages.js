@@ -4,7 +4,7 @@
 (function (TP) {
   var h = TP.h;
   TP.view.stack = [];
-  TP.pages = {};
+  TP.pages = TP.pages || {};
 
   function mainEl() { return document.getElementById('main'); }
   function currentTitle() {

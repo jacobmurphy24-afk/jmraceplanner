@@ -31,11 +31,8 @@
     var acts = hasG ? ctx.scored.filter(function (a) { return a.date >= ws && a.date <= we && a.discipline !== 'Transition'; }) : [];
     var rate = tssRates(ctx);
 
-    // --- Charts first: the week day by day, and fitness / fatigue / form ---
-    var charts = h('div', { class: 'coach-2' });
-    charts.appendChild(dayChart(ws, planned, acts));
-    if (hasG) charts.appendChild(formChart(ctx, ws, we, planned, rate));
-    root.appendChild(charts);
+    // --- The plan against what's been done ---
+    root.appendChild(weekGrid(ws, planned, acts, hasG));
 
     // --- Block and race ---
     var cards = h('div', { class: 'coach-2' });
@@ -43,8 +40,8 @@
     cards.appendChild(raceCard(ctx));
     root.appendChild(cards);
 
-    // --- The plan against what's been done ---
-    root.appendChild(weekGrid(ws, planned, acts, hasG));
+    // --- Fitness, fatigue and form (full width) ---
+    if (hasG) root.appendChild(formChart(ctx, ws, we, planned, rate));
 
     // --- Fitness and health ---
     root.appendChild(health(ctx, ws, we, planned));
@@ -58,22 +55,6 @@
     return rate;
   }
 
-  // Hours each day: done (by sport) as bars, planned as markers.
-  function dayChart(ws, planned, acts) {
-    var days = []; for (var i = 0; i < 7; i++) days.push(TP.addDays(ws, i));
-    var series = [];
-    ['Swim', 'Bike', 'Run', 'Other'].forEach(function (d) {
-      var pts = days.map(function (day) { return [day, A.sum(acts.filter(function (a) { return a.date === day && a.discipline === d; }).map(function (a) { return a.hours; }))]; });
-      if (pts.some(function (p) { return p[1] > 0; })) series.push({ name: d + ' done', col: TP.coach.sportCol(d), kind: 'bar', stack: true, barW: 0.6, pts: pts, fmt: function (v) { return TP.fmtH(v); } });
-    });
-    var pl = days.map(function (day) { var x = planned.filter(function (s) { return s.date === day; }); return [day, x.length ? A.sum(x.map(TP.estHours)) : null]; });
-    if (pl.some(function (p) { return fin(p[1]); })) series.push({ name: 'Planned', col: '#111111', kind: 'dots', r: 5, pts: pl, fmt: function (v) { return TP.fmtH(v); } });
-    var p = h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'The week day by day'), h('div', { class: 'muted small' }, 'Hours of training each day: bars are what you did (by sport), dots what was planned.'));
-    if (!series.length) { p.appendChild(h('p', { class: 'muted small' }, 'Nothing planned or done this week yet.')); return p; }
-    p.appendChild(C.xy({ height: 190, x: { type: 'date', min: C.dnum(ws) - 0.5, max: C.dnum(ws) + 6.5, ticks: days, fmt: function (v) { return TP.fmt(C.dstr(v), '%a'); } },
-      y: { fmt: function (v) { return v.toFixed(v < 10 ? 1 : 0); }, zero: true, min: 0 }, series: series, vlines: TP.today() >= ws && TP.today() <= TP.addDays(ws, 6) ? [{ x: TP.today(), col: '#9b30ff', dash: '4 3' }] : null }));
-    return p;
-  }
   // Fitness, fatigue and form over the last six weeks, projected to the end of the week from the plan.
   function formChart(ctx, ws, we, planned, rate) {
     var today = TP.today(), to = we < today ? we : TP.addDays(today, -1), from = TP.addDays(ws, -35);
@@ -85,7 +66,7 @@
     }
     var p = h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Fitness, fatigue and form'),
       h('div', { class: 'muted small' }, 'The last six weeks' + (we >= today ? ', and where this week’s plan takes you (dashed)' : '') + '. The shaded area is this week.'));
-    p.appendChild(TP.coach.pmcChart(load, { height: 190, bands: [{ x0: C.dnum(ws) - 0.5, x1: C.dnum(we) + 0.5, fill: '#f3f0ff' }] }));
+    p.appendChild(TP.coach.pmcChart(load, { height: 260, bands: [{ x0: C.dnum(ws) - 0.5, x1: C.dnum(we) + 0.5, fill: '#f3f0ff' }] }));
     return p;
   }
 

@@ -122,8 +122,15 @@
   }
 
   // --- Block pop-up ---
+  // The block report opens as its own page (Back returns to wherever it was opened from).
   TP.blockModal = function (bid, startTab) {
     var rb = TP.reportBlock(bid); if (!rb) return;
+    TP.openPage({ kind: 'report', bid: bid, tab: startTab || null, title: rb.name + ' report' });
+  };
+  TP.pages = TP.pages || {};   // (this file loads before pages.js)
+  TP.pages.report = function (root, p) {
+    var bid = p.bid, rb = TP.reportBlock(bid);
+    if (!rb) { root.appendChild(h('p', { class: 'muted' }, 'This event isn’t in the plan any more.')); return; }
     var s = rb.sess, chartBox = h('div'), bigBox = h('div');
     function drawChart() {
       var km = TP.state.prefs.rpAxis === 'Distance';
@@ -157,7 +164,7 @@
             return h('span', null, h('i', { style: 'background:' + TP.SPORT_COLOURS[sp] }), sp + ' ' + ws.filter(function (x) { return x.sport === sp; }).length);
           }) : h('span', { class: 'muted' }, 'Nothing planned')),
           h('span', { class: 'wk-tot' }, ws.length ? [sum(ws, 'km') > 0 ? TP.fmtKm(sum(ws, 'km')) : null, TP.fmtH(sum(ws, 'h'))].filter(Boolean).join(' · ') : ''),
-          wa ? h('a', { href: '#', class: 'wk-verdict', style: 'color:' + (VC[wa.verdict] || '#666'), onclick: function (e) { e.preventDefault(); e.stopPropagation(); TP.openPage({ kind: 'week', wk: w, blockId: rb.id, label: 'Week ' + (i + 1) + ' of ' + rb.name, title: 'Week ' + (i + 1) + ' of ' + rb.name, backLabel: rb.name + ' report', reopen: function () { TP.blockModal(rb.id, 'Weeks'); } }); } }, wa.verdict + ' →') : h('span', { class: 'wk-verdict' })),
+          wa ? h('a', { href: '#', class: 'wk-verdict', style: 'color:' + (VC[wa.verdict] || '#666'), onclick: function (e) { e.preventDefault(); e.stopPropagation(); TP.openPage({ kind: 'week', wk: w, blockId: rb.id, label: 'Week ' + (i + 1) + ' of ' + rb.name, title: 'Week ' + (i + 1) + ' of ' + rb.name }); } }, wa.verdict + ' →') : h('span', { class: 'wk-verdict' })),
         ws.length ? h('div', { class: 'wk-body' }, ws.map(function (x) {
           return h('div', { class: 'wk-sess', onclick: function () { TP.sessionView(x.id); } },
             h('span', { class: 'sdot', style: 'background:' + TP.typeCol(x.type) }), h('span', { class: 'wk-sd' }, TP.fmt(x.date, '%a %d')),
@@ -176,6 +183,7 @@
       h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'By sport'), sportTbl));
     var weeksTab = h('div', null, h('div', { class: 'muted small', style: 'margin-bottom:8px' }, 'Open a week to see its sessions.'), weeks);
     function tab(v) {
+      p.tab = v;   // so Back returns to the same tab
       TP.clear(tabsBody);
       try {
         if (v === 'Weeks') tabsBody.appendChild(weeksTab);
@@ -189,30 +197,28 @@
     if (hasGarmin && rb.status !== 'Upcoming') tabList.push({ value: 'Progress', label: rb.status === 'Completed' ? 'Progress' : 'Current progress' });
     tabList.push({ value: 'Weeks', label: 'Weeks' });
     if (rb.status !== 'Completed') tabList.push({ value: 'Suggestions', label: 'Suggestions' });
-    var firstTab = startTab || (rb.status === 'In progress' ? (hasGarmin ? 'Progress' : 'Weeks') : 'Overview');
+    var firstTab = p.tab || (rb.status === 'In progress' ? (hasGarmin ? 'Progress' : 'Weeks') : 'Overview');
 
-    var m = TP.modal({ size: 'xl', cls: 'gloss',
-      title: h('div', { class: 'rp-m-head', style: '--c:' + rb.col },
-        h('div', null, h('div', { class: 'rp-type' }, rb.p.race_type.toUpperCase()), h('div', { class: 'md-t' }, rb.name),
-          h('div', { class: 'rp-dates' }, TP.fmt(rb.start, '%d %b %Y') + ' – ' + TP.fmt(rb.race_date, '%d %b %Y') + ' · ' + rb.n + ' weeks · ' +
-            (rb.p.race_type === 'Training Only' ? 'Final day: ' : 'Race day: ') + TP.fmt(rb.race_date, '%A %d %B %Y'))),
-        h('div', { class: 'chips-r' }, prioChip(rb.p), statusChip(rb))),
-      body: [
-        h('div', { class: 'kpis kpis-4' }, kpi(s.length, 'Sessions'), kpi(TP.fmtKm(sum(s, 'km')), 'Planned distance'), bigBox,
-          (function () {
-            var due = s.filter(function (x) { return x.date < TP.today(); }), done = hasGarmin ? due.filter(function (x) { return TP.match.linkFor(x.id); }).length : 0;
-            return due.length && hasGarmin ? kpi(done + ' / ' + due.length, 'Done so far', Math.round(done / due.length * 100) + '%')
-              : kpi(rb.status === 'Upcoming' ? TP.daysBetween(TP.today(), rb.start) + ' days' : rb.status === 'In progress' ? 'Week ' + rb.cur : 'Done', rb.status === 'Upcoming' ? 'Until it starts' : 'Progress');
-          })()),
-        TP.chips(tabList, firstTab, tab, 'tabs tabs-scroll'),
-        tabsBody],
-      footer: [h('button', { class: 'btn btn-sm', onclick: function () { TP.printPlan(bid); } }, TP.icon('download'), 'Download plan (PDF)'),
-               hasGarmin && rb.start <= TP.today() ? h('button', { class: 'btn btn-sm', onclick: function () {
-                 var rv = TP.blocks.list().filter(function (x) { return x.calendar_id === bid; })[0]; if (rv) TP.blocks.open(rv);
-               } }, TP.icon('chart'), 'Block review') : null,
-               h('span', { class: 'grow' }),
-               h('button', { class: 'btn btn-sm needs-edit', onclick: function () { m.close(); TP.eventForm(bid); } }, TP.icon('pencil'), 'Edit event'),
-               h('button', { class: 'btn btn-primary btn-sm', onclick: function () { m.close(); } }, 'Close')] });
+    root.appendChild(h('div', { class: 'rp-m-head rp-page-head', style: '--c:' + rb.col },
+      h('div', null, h('div', { class: 'rp-type' }, rb.p.race_type.toUpperCase()), h('h2', null, rb.name),
+        h('div', { class: 'rp-dates' }, TP.fmt(rb.start, '%d %b %Y') + ' – ' + TP.fmt(rb.race_date, '%d %b %Y') + ' · ' + rb.n + ' weeks · ' +
+          (rb.p.race_type === 'Training Only' ? 'Final day: ' : 'Race day: ') + TP.fmt(rb.race_date, '%A %d %B %Y')),
+        h('div', { class: 'chips-r', style: 'margin-top:6px' }, prioChip(rb.p), statusChip(rb))),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn btn-sm', onclick: function () { TP.printPlan(bid); } }, TP.icon('download'), 'Download plan (PDF)'),
+        hasGarmin && rb.start <= TP.today() ? h('button', { class: 'btn btn-sm', onclick: function () {
+          var rv = TP.blocks.list().filter(function (x) { return x.calendar_id === bid; })[0]; if (rv) TP.blocks.open(rv);
+        } }, TP.icon('chart'), 'Block review') : null,
+        h('button', { class: 'btn btn-sm needs-edit', onclick: function () { TP.eventForm(bid); } }, TP.icon('pencil'), 'Edit event'),
+        TP.glossaryButton())));
+    root.appendChild(h('div', { class: 'kpis kpis-4' }, kpi(s.length, 'Sessions'), kpi(TP.fmtKm(sum(s, 'km')), 'Planned distance'), bigBox,
+      (function () {
+        var due = s.filter(function (x) { return x.date < TP.today(); }), done = hasGarmin ? due.filter(function (x) { return TP.match.linkFor(x.id); }).length : 0;
+        return due.length && hasGarmin ? kpi(done + ' / ' + due.length, 'Done so far', Math.round(done / due.length * 100) + '%')
+          : kpi(rb.status === 'Upcoming' ? TP.daysBetween(TP.today(), rb.start) + ' days' : rb.status === 'In progress' ? 'Week ' + rb.cur : 'Done', rb.status === 'Upcoming' ? 'Until it starts' : 'Progress');
+      })()));
+    root.appendChild(TP.chips(tabList, firstTab, tab, 'tabs tabs-scroll'));
+    root.appendChild(tabsBody);
     drawChart(); tab(firstTab);
   };
 
@@ -254,7 +260,7 @@
       h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Keep an eye on'), CO.list(pr.watch, 'watch'))));
     if (pr.sport_impact.length) out.appendChild(h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'How each sport is responding so far'),
       h('div', { class: 'br-grid', style: 'margin-top:8px' }, pr.sport_impact.map(function (s) {
-        return TP.blocks.sportCard(s, function () { TP.openPage({ kind: 'sport', blockId: rb.id, sport: s.sport, title: s.sport + ' · ' + rb.name, backLabel: rb.name + ' report', reopen: function () { TP.blockModal(rb.id, 'Progress'); } }); });
+        return TP.blocks.sportCard(s, function () { TP.openPage({ kind: 'sport', blockId: rb.id, sport: s.sport, title: s.sport + ' · ' + rb.name }); });
       }))));
     if (pr.next7) out.appendChild(h('p', { class: 'muted small' }, sp('Next 7 days: %d planned sessions, about %.1f h and %.0f TSS.', pr.next7.n, pr.next7.h, pr.next7.tss)));
     return out;
