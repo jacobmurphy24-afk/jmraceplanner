@@ -45,7 +45,7 @@
       C.activeId = null; C.plan = null; C.plansLoaded = false; C.needsStart = false;
       TP.state = TP.normalise({ prefs: TP.state.prefs });
       document.body.classList.remove('readonly');
-      C.user = u ? { uid: u.uid, email: (u.email || '').toLowerCase(), name: u.displayName || '', verified: u.emailVerified } : null;
+      C.user = u ? { uid: u.uid, email: (u.email || '').toLowerCase(), name: u.displayName || '', verified: u.emailVerified, created: Date.parse(u.metadata.creationTime) || null } : null;
       C.ready = true;
       if (TP.garmin) TP.garmin.setUser(C.user ? C.user.uid : null);
       if (C.user) listenPlans();
@@ -200,7 +200,7 @@
   C.signUp = function (name, email, password) {
     return F.createUserWithEmailAndPassword(auth, email.trim(), password).then(function (cred) {
       return F.updateProfile(cred.user, { displayName: name.trim() }).then(function () {
-        C.user = { uid: cred.user.uid, email: cred.user.email.toLowerCase(), name: name.trim(), verified: false };
+        C.user = { uid: cred.user.uid, email: cred.user.email.toLowerCase(), name: name.trim(), verified: false, created: Date.parse(cred.user.metadata.creationTime) || Date.now() };
         return Promise.all([profileDoc(), F.sendEmailVerification(cred.user)]);
       });
     });

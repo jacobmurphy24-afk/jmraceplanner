@@ -14,7 +14,7 @@
 
   <h1>Privacy policy</h1>
   <p class="updated">Last updated 27 October 2026</p>
-  <p>Training Planner (<a href="https://jmraceplanner.co.uk">jmraceplanner.co.uk</a>) helps you plan races and training and analyse the activities you record on Garmin devices. This policy explains what data the site uses, where it is kept, who else handles it and what your rights are. It’s written to be read: if anything is unclear, get in touch.</p>
+  <p>Training Planner (<a href="https://jmraceplanner.co.uk">jmraceplanner.co.uk</a>) helps you plan races and training and analyse the activities you record on your sports watch. This policy explains what data the site uses, where it is kept, who else handles it and what your rights are. It’s written to be read: if anything is unclear, get in touch.</p>
 
   <h2>Who we are</h2>
   <p>The site is run by Jacob Murphy, an individual based in the United Kingdom, who is the data controller for the personal data described here. Contact: <a href="mailto:privacy@jmraceplanner.co.uk">privacy@jmraceplanner.co.uk</a>.</p>
@@ -22,7 +22,7 @@
 
   <h2>The short version</h2>
   <ul>
-    <li><b>Your Garmin activities and health data stay on your device.</b> Activity files, routes, heart rate, sleep and similar data are stored in your browser on the device you uploaded or synced them on. They are not stored on our servers.</li>
+    <li><b>Your activities and health data stay on your device.</b> Activity files, routes, heart rate, sleep and similar data are stored in your browser on the device you uploaded them on. They are not stored on our servers.</li>
     <li><b>Your account and plans are stored with Google Firebase</b> in London (europe-west2), so you can sign in on any device and share plans.</li>
     <li><b>You can ask for a copy of your data or for it to be deleted at any time.</b></li>
   </ul>
@@ -36,10 +36,8 @@
         <td>Google Cloud Firestore, London (europe-west2)</td><td>To provide the planner and plan sharing</td></tr>
     <tr><td><b>Analysis settings and results</b>: which activity is linked to which planned session, saved block reviews (summaries such as training load and fitness scores), and your training thresholds (e.g. threshold heart rate, power and pace)</td>
         <td>Google Cloud Firestore, London, readable only by your account</td><td>So your links, reviews and settings are the same on every device</td></tr>
-    <tr><td><b>Garmin activities and wellness data</b>: activity summaries and second-by-second data (heart rate, power, pace, cadence, elevation, GPS route, laps), sleep, resting heart rate and heart-rate variability</td>
-        <td>Only in your browser’s storage (IndexedDB) on the device that uploaded or synced them</td><td>To show and analyse your training</td></tr>
-    <tr><td><b>Garmin personal API key</b> (only if you choose to connect one)</td>
-        <td>Only in your browser’s storage on that device</td><td>To fetch your activities from Garmin</td></tr>
+    <tr><td><b>Activities and wellness data</b>: activity summaries and second-by-second data (heart rate, power, pace, cadence, elevation, GPS route, laps), sleep, resting heart rate and heart-rate variability</td>
+        <td>Only in your browser’s storage (IndexedDB) on the device that uploaded them</td><td>To show and analyse your training</td></tr>
     <tr><td><b>Invitation emails</b>: the invitee’s email address, the plan name and your name</td>
         <td>Sent through Resend; a count per sender and per address is kept for 2 days to stop abuse</td><td>To email people you invite to a plan</td></tr>
     <tr><td><b>Technical data</b>: IP address, browser type and time of requests</td>
@@ -47,7 +45,7 @@
   </table>
 
   <h3>Health data</h3>
-  <p>Heart rate, sleep, heart-rate variability and training data count as health data under UK data protection law, which needs extra care. We use it only to give you the analysis you ask for, and only with your explicit consent. Before anything is read from a Garmin export or from Garmin itself, the site explains what it uses and asks you to agree by ticking a box. We save a record of when you agreed with your account (or on the device, if you don’t have one), and ask again if what we do with the data changes. Most of the data never leaves your device. The parts saved to your account (thresholds and block review summaries) are visible only to you. You can withdraw consent at any time in Settings → Garmin analysis → Withdraw consent: this removes the Garmin connection and the Garmin data on that device, and deletes the consent record. To have the data saved to your account deleted as well, delete your account (Plans &amp; sharing → Delete my account).</p>
+  <p>Heart rate, sleep, heart-rate variability and training data count as health data under UK data protection law, which needs extra care. We use it only to give you the analysis you ask for, and only with your explicit consent. Before anything is read from a data export or activity file, the site explains what it uses and asks you to agree by ticking a box. We save a record of when you agreed with your account (or on the device, if you don’t have one), and ask again if what we do with the data changes. Most of the data never leaves your device. The parts saved to your account (thresholds and block review summaries) are visible only to you. You can withdraw consent at any time in Settings → Activity analysis → Withdraw consent: this deletes the activity data on that device and the consent record. To have the data saved to your account deleted as well, delete your account (Plans &amp; sharing → Delete my account).</p>
 
   <h3>Legal basis</h3>
   <ul>
@@ -56,27 +54,24 @@
     <li><b>Legitimate interests</b>: to keep the site secure and prevent abuse (for example, limiting how many invitation emails can be sent).</li>
   </ul>
 
-  <h2>Uploading your Garmin export</h2>
-  <p>When you upload the ZIP from Garmin’s “Export your data”, it is opened and read entirely in your browser. Only activity files, activity names, and daily sleep and resting heart rate are read; everything else in the export (profile, devices, gear, settings and so on) is ignored. Nothing from the file is sent to our servers.</p>
+  <h2>Uploading your activity data</h2>
+  <p>When you upload a data export from your watch’s app (a ZIP) or individual .fit activity files, they are opened and read entirely in your browser. Only activity files, activity names, and daily sleep and resting heart rate are read; everything else in the export (profile, devices, gear, settings and so on) is ignored. Nothing from the file is sent to our servers.</p>
 
-  <h2>Connecting Garmin</h2>
-  <p>If you connect a Garmin personal API key, requests to Garmin pass through a small relay we run on Cloudflare Workers (<code>garmin.jmraceplanner.co.uk</code>), because Garmin doesn’t accept requests directly from web pages. The relay only forwards requests to a fixed list of read-only Garmin addresses and passes the response back. It does not store your key or your data. Garmin’s own handling of your data is covered by <a href="https://www.garmin.com/en-GB/privacy/connect/" target="_blank" rel="noopener">Garmin’s privacy notice</a>.</p>
-  <p>If we later offer a direct connection through the Garmin Connect Developer Program, this policy will be updated before it is switched on, explaining what is stored and where.</p>
+  <p>The site doesn’t connect to your watch maker’s account. If we offer a direct connection in future, this policy will be updated before it is switched on, explaining what is stored and where.</p>
 
   <h2>Who else handles your data</h2>
   <table>
     <tr><th>Provider</th><th>What for</th><th>Location</th></tr>
     <tr><td>Google (Firebase Authentication, Cloud Firestore)</td><td>Accounts, plans, analysis settings and reviews</td><td>Firestore data in London; authentication may be processed by Google in the US</td></tr>
     <tr><td>GitHub (GitHub Pages)</td><td>Hosting the website’s files</td><td>US</td></tr>
-    <tr><td>Cloudflare</td><td>Domain name service, the Garmin relay and invitation service, and the cdnjs library server that delivers the map code</td><td>Global network</td></tr>
+    <tr><td>Cloudflare</td><td>Domain name service, the invitation email service, a relay the site’s developers use to fetch their own training data (it doesn’t handle other users’ data), and the cdnjs library server that delivers the map code</td><td>Global network</td></tr>
     <tr><td>Resend</td><td>Sending invitation emails</td><td>US</td></tr>
     <tr><td>OpenStreetMap Foundation</td><td>Map tiles for activity routes (your browser requests tiles for the area of the route)</td><td>UK / EU</td></tr>
-    <tr><td>Garmin</td><td>Only if you connect a Garmin API key: the source of your activities</td><td>US / EU</td></tr>
   </table>
   <p>Where data is processed outside the UK, these providers rely on the UK’s adequacy regulations (including the UK Extension to the EU–US Data Privacy Framework) or the UK International Data Transfer Addendum to the EU standard contractual clauses.</p>
 
   <h2>Storage on your device</h2>
-  <p>The site uses your browser’s storage to keep you signed in (Firebase), to store your Garmin data and API key if you add them, to remember small preferences, and to work offline (a service worker keeps a copy of the site’s files). There are no advertising or tracking cookies, so there is no cookie banner. Signing out deletes your Garmin data, your API key and the offline copy of your plans from that device. You can also use Settings → Garmin analysis → Clear stored Garmin activities, or clear the site’s data in your browser.</p>
+  <p>The site uses your browser’s storage to keep you signed in (Firebase), to store the activity data you add, to remember small preferences, and to work offline (a service worker keeps a copy of the site’s files). There are no advertising or tracking cookies, so there is no cookie banner. Signing out deletes your activity data and the offline copy of your plans from that device. You can also use Settings → Activity analysis → Clear stored activities, or clear the site’s data in your browser.</p>
 
   <h2>How long we keep it</h2>
   <ul>

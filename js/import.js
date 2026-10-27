@@ -204,7 +204,7 @@
     });
     job.p = p.then(function () {
       var j = job;
-      if (!j.added && !j.matched && !fits.length) TP.toast('No activity files found. Upload the ZIP from Garmin’s data export, or .fit files.', 'warn');
+      if (!j.added && !j.matched && !fits.length) TP.toast('No activity files found. Upload the ZIP from your watch app’s data export, or .fit files.', 'warn');
       else TP.toast('Added ' + j.added + ' activities' + (j.matched ? ', ' + j.matched + ' already here' : '') + (j.nights ? ', ' + j.nights + ' days of sleep and heart-rate data' : '') + (j.failed ? ' (' + j.failed + ' couldn’t be read)' : '') + '.');
     }).catch(function (e) { console.error(e); TP.toast('Upload stopped: ' + e.message, 'error'); })
       .finally(function () { job = null; G.ver++; TP.changed(); G.prepare().then(function () { if (TP.match) TP.match.askSoon(); }); });
@@ -233,17 +233,16 @@
     var inp = h('input', { type: 'file', accept: '.zip,.fit,application/zip', multiple: true, style: 'display:none', onchange: function () { G.importFiles(inp.files); inp.value = ''; } });
     var dir = h('input', { type: 'file', webkitdirectory: '', multiple: true, style: 'display:none', onchange: function () { G.importFiles(dir.files); dir.value = ''; } });
     var pickDir = h('button', { class: 'btn btn-sm', disabled: !!job, onclick: function () { G.withConsent(function () { dir.click(); }); } }, TP.icon('folder'), 'Choose the unzipped folder');
-    var pick = h('button', { class: 'btn btn-primary', disabled: !!job, onclick: function () { G.withConsent(function () { inp.click(); }); } }, TP.icon('upload'), job ? 'Uploading…' : 'Choose your Garmin export');
+    var pick = h('button', { class: 'btn btn-primary', disabled: !!job, onclick: function () { G.withConsent(function () { inp.click(); }); } }, TP.icon('upload'), job ? 'Uploading…' : 'Choose your data export');
     var drop = h('div', { class: 'drop-zone', ondragover: function (e) { e.preventDefault(); drop.classList.add('over'); }, ondragleave: function () { drop.classList.remove('over'); },
       ondrop: function (e) { e.preventDefault(); drop.classList.remove('over'); droppedFiles(e.dataTransfer).then(G.importFiles); } },
       inp, dir, pick, h('div', { class: 'muted small' }, 'or drop the .zip, the folder, or .fit files here'),
       h('div', { class: 'small drop-alt' }, h('span', { class: 'muted' }, 'Did your Mac unzip it? '), pickDir));
     return h('div', { class: 'panel import-card' },
-      h('div', { class: 'panel-h' }, opts.title || 'Upload your Garmin history'),
-      h('p', { class: 'small' }, 'Request your data from Garmin (it arrives by email as a ZIP), then upload the ZIP here as it is (or the folder, if your computer unzipped it). Your activities, routes and second-by-second data are read in this browser and kept on this device only. ',
-        h('a', { href: 'garmin-guide.html', target: '_blank', rel: 'noopener' }, 'How to download your Garmin data')),
+      h('div', { class: 'panel-h' }, opts.title || 'Upload your activity history'),
+      h('p', { class: 'small' }, 'Request a full data export from your watch’s app (it usually arrives by email as a ZIP), then upload the ZIP here as it is (or the folder, if your computer unzipped it). You can also upload individual .fit activity files. Your activities, routes and second-by-second data are read in this browser and kept on this device only.'),
       drop,
       job ? h('div', { class: 'sync-progress', id: 'imp-msg' }, job.msg) : null,
-      h('p', { class: 'hint' }, 'Garmin’s export can take a few days to arrive and can be several gigabytes. Upload on a computer if you can. Activities already here are skipped, so it’s safe to upload again.'));
+      h('p', { class: 'hint' }, 'An export can take a few days to arrive and can be several gigabytes. Upload on a computer if you can. Activities already here are skipped, so it’s safe to upload again.'));
   };
 })(window.TP);

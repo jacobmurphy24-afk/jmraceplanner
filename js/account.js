@@ -113,7 +113,7 @@
       mode === 'signup' ? h('p', { class: 'hint' }, 'By creating an account you agree to how your data is used, as set out in the ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'privacy policy'), '.') : null,
       go);
     card.appendChild(h('h1', { class: 'gate-title' }, title));
-    card.appendChild(h('p', { class: 'gate-sub' }, mode === 'reset' ? 'We’ll email you a link to choose a new password.' : 'Plan your race calendar and training blocks, share plans with the people you train with, and connect Garmin.'));
+    card.appendChild(h('p', { class: 'gate-sub' }, mode === 'reset' ? 'We’ll email you a link to choose a new password.' : 'Plan your race calendar and training blocks, share plans with the people you train with, and analyse your training.'));
     card.appendChild(form);
     var link = function (label, m) { return h('a', { href: '#', class: 'gate-link', onclick: function (e) { e.preventDefault(); redraw(m); } }, label); };
     card.appendChild(h('div', { class: 'gate-links' },
@@ -239,11 +239,11 @@
           h('li', null, owned.length ? 'the ' + (owned.length === 1 ? 'plan' : owned.length + ' plans') + ' you own, with all their events, sessions and templates;' : 'your profile (name and email);'),
           owned.length ? h('li', null, 'your profile (name and email);') : null,
           h('li', null, 'your block reviews, training thresholds, links between sessions and activities, and consent record;'),
-          h('li', null, 'your Garmin data, API key and offline copy of your plans on this device;'),
+          h('li', null, 'your activity data and offline copy of your plans on this device;'),
           h('li', null, 'your sign-in, so this email address can’t sign in any more.')),
         member ? h('p', { class: 'small' }, 'You’ll also leave the ' + (member === 1 ? 'plan' : member + ' plans') + ' other people shared with you. Their plans aren’t changed otherwise.') : null,
         sharedOwned.length ? h('p', { class: 'small' }, h('b', null, 'Other people will lose access to: '), sharedOwned.map(function (p) { return '“' + p.name + '”'; }).join(', ') + '. Use Save plan first if anyone needs a copy.') : null,
-        h('p', { class: 'small muted' }, 'If you’ve used Garmin analysis on other devices, sign out there first to remove it, or clear the site’s data in those browsers afterwards. Nothing on your Garmin account is changed.'),
+        h('p', { class: 'small muted' }, 'If you’ve added activities on other devices, sign out there first to remove them, or clear the site’s data in those browsers afterwards.'),
         TP.field('Enter your password to confirm', pw)],
       footer: [h('button', { class: 'btn', onclick: function () { t.close(); } }, 'Cancel'),
                h('button', { class: 'btn btn-danger', onclick: function () {

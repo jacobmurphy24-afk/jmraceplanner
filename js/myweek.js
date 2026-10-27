@@ -176,7 +176,7 @@
   // Fitness (training load) and health (sleep, HRV, resting heart rate), with a readiness read-out.
   function health(ctx, ws, we) {
     var p = h('div', { class: 'panel' }, h('div', { class: 'panel-h' }, 'Fitness and health'));
-    if (!ctx) { p.appendChild(h('p', { class: 'muted small' }, 'Connect Garmin and sync to see your fitness, fatigue, sleep and heart-rate variability here.')); return p; }
+    if (!ctx) { p.appendChild(h('p', { class: 'muted small' }, 'Upload your activities (Analysis → Upload history) to see your fitness, fatigue, sleep and heart-rate variability here.')); return p; }
     var today = TP.today(), asOf = we < today ? we : today, yday = TP.addDays(asOf, -1);
     var load = A.loadModel(ctx.scored, TP.addDays(asOf, -14), yday), now = load[load.length - 1], wkAgo = load[load.length - 8];
     var ramp = now && wkAgo ? now.ctl - wkAgo.ctl : null, acwr = now && now.ctl > 10 ? now.atl / now.ctl : null;
@@ -194,11 +194,11 @@
       kpi(now ? Math.round(now.atl) : '–', 'Fatigue (ATL)', 'last 7 days'),
       kpi(now ? sp('%+.0f', now.tsb) : '–', 'Form (TSB)', now ? TP.coach.formLabel(now.tsb) : null, formCol),
       kpi(fin(acwr) ? acwr.toFixed(2) : '–', 'Load ratio (ACWR)', fin(acwr) ? (acwr > 1.5 ? 'spike – ease off' : acwr > 1.3 ? 'high' : acwr < 0.8 ? 'low' : 'in the safe range') : null, fin(acwr) ? (acwr > 1.5 ? '#ff3b30' : acwr > 1.3 ? '#d99a00' : null) : null),
-      vo2 ? kpi(Math.round(vo2.vo2max), 'VO2max', 'Garmin, ' + TP.fmt(vo2.date, '%d %b')) : null));
+      vo2 ? kpi(Math.round(vo2.vo2max), 'VO2max', 'Watch estimate, ' + TP.fmt(vo2.date, '%d %b')) : null));
     p.appendChild(h('div', { class: 'lbl', style: 'margin-top:12px' }, 'Health' + (night ? ' (night of ' + TP.fmt(TP.addDays(night.date, -1), '%a %d %b') + ')' : '')));
     var hrvState = night && fin(night.hrv) ? (fin(night.hrv_low) && night.hrv < night.hrv_low ? 'low' : fin(night.hrv_high) && night.hrv > night.hrv_high ? 'high' : fin(night.hrv_low) ? 'normal' : fin(hrvBase) ? (night.hrv < 0.9 * hrvBase ? 'low' : 'normal') : null) : null;
     var rhrDiff = night && fin(night.rhr) && fin(rhrBase) ? night.rhr - rhrBase : null;
-    if (!w.length) p.appendChild(h('p', { class: 'muted small' }, 'No sleep or HRV data yet. Sync from Garmin to add it.'));
+    if (!w.length) p.appendChild(h('p', { class: 'muted small' }, 'No sleep or HRV data yet. Upload your data export to add it.'));
     else p.appendChild(h('div', { class: 'kpi-grid' },
       kpi(night && fin(night.sleep_h) ? night.sleep_h.toFixed(1) + ' h' : '–', 'Sleep last night', night && fin(night.sleep_score) ? 'score ' + Math.round(night.sleep_score) : null, night && fin(night.sleep_h) ? (night.sleep_h < 6.5 ? '#d99a00' : null) : null),
       kpi(fin(sleep7) ? sleep7.toFixed(1) + ' h' : '–', 'Sleep, 7-night average', fin(sleep7) ? (sleep7 >= 8 ? 'plenty' : sleep7 >= 7 ? 'OK – 8 h is better' : 'too little') : null, fin(sleep7) && sleep7 < 7 ? '#d99a00' : null),

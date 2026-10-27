@@ -48,7 +48,7 @@
       body: [
         h('div', { class: 'form-section' }, 'Distance units'), units,
         h('p', { class: 'hint' }, 'Changes every distance, pace and speed shown. Your plan isn\u2019t changed, so you can switch back at any time.'),
-        h('div', { class: 'form-section' }, 'Garmin analysis'),
+        h('div', { class: 'form-section' }, 'Activity analysis'),
         h('p', { class: 'small' }, 'Training stress, zones and predictions use your thresholds, estimated from your activities unless you enter tested values.'),
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn btn-sm', onclick: function () {
@@ -56,12 +56,12 @@
             var t = TP.modal({ size: 'l', stack: true, cls: 'gloss', title: h('div', { class: 'md-t' }, 'Training thresholds'), body: b, footer: h('button', { class: 'btn btn-primary', onclick: function () { t.close(); } }, 'Done') });
           } }, TP.icon('heart'), 'Training thresholds'),
           TP.garmin && TP.garmin.acts.length ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
-            TP.confirm('Delete the ' + TP.garmin.acts.length + ' Garmin activities and sleep data stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { TP.garmin.clearActs(); m.close(); });
-          } }, TP.icon('trash'), 'Clear stored Garmin activities') : null,
+            TP.confirm('Delete the ' + TP.garmin.acts.length + ' activities and sleep data stored on this device? You can upload them again later.', 'Delete', function () { TP.garmin.clearActs(); m.close(); });
+          } }, TP.icon('trash'), 'Clear stored activities') : null,
           TP.garmin && (TP.garmin.consented() || TP.garmin.acts.length || TP.garmin.connected()) ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
-            TP.confirm('Withdraw your consent to Training Planner using your Garmin health data? The Garmin connection and all Garmin data on this device are deleted, and you’ll be asked again before anything is read from Garmin. Your Garmin account isn’t affected.', 'Withdraw', function () { TP.garmin.withdrawConsent(); m.close(); });
+            TP.confirm('Withdraw your consent to Training Planner using your activity and health data? All activity data on this device is deleted, and you’ll be asked again before anything is read.', 'Withdraw', function () { TP.garmin.withdrawConsent(); m.close(); });
           } }, 'Withdraw consent') : null),
-        h('p', { class: 'hint' }, 'Garmin activities are kept only on this device. ' + (TP.garmin && TP.garmin.consented() ? 'You agreed to their use on ' + TP.fmt(TP.garmin.consentDate(), '%d %b %Y') + '. ' : ''), h('a', { href: 'garmin-guide.html', target: '_blank', rel: 'noopener' }, 'How to upload your Garmin history'), ' · ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy')),
+        h('p', { class: 'hint' }, 'Activities are kept only on this device. ' + (TP.garmin && TP.garmin.consented() ? 'You agreed to their use on ' + TP.fmt(TP.garmin.consentDate(), '%d %b %Y') + '. ' : ''), h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy')),
         h('div', { class: 'form-section' }, 'Start again'),
         h('p', { class: 'small' }, 'Your plan is saved automatically in this browser. Use Save plan first if you want a copy.'),
         h('button', { class: 'btn btn-outline-danger', onclick: function () {

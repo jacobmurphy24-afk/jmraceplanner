@@ -44,7 +44,7 @@
   };
   function tile(rv) {
     var r = B.result(rv), weeks = Math.round(TP.daysBetween(rv.start, rv.race_date) / 7), rs = r.race_summary;
-    var line = r.empty ? 'No Garmin data for this block yet – open it to sync' : r.upcoming ? 'Race to come – training so far' : !rs ? 'No race activity found on race day'
+    var line = r.empty ? 'No activity data for this block yet' : r.upcoming ? 'Race to come – training so far' : !rs ? 'No race activity found on race day'
       : 'Race: ' + A.fmtDur(rs.time_s) + (rs.km > 0 ? sp(' · %.1f km', rs.km) : '') + (fin(rs.display_ratio) ? sp(' · %.1f%% %s than predicted', Math.abs(rs.display_ratio - 1) * 100, rs.display_ratio >= 1 ? 'faster' : 'slower') : '');
     return h('div', { class: 'br-tile', style: 'border-top-color:' + sportCol(rv.sport), onclick: function () { B.open(rv); } },
       h('div', { class: 'br-tile-top' },
@@ -114,14 +114,14 @@
       h('div', { class: 'btn-row' },
         G.connected() ? h('button', { class: 'btn btn-sm', disabled: !!G.syncing, onclick: function () { G.sync(rv.start, rv.race_date < TP.today() ? TP.addDays(rv.race_date, 1) : TP.today(), true); } }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync this block') : null,
         h('button', { class: 'btn btn-sm', onclick: function () { B.form(rv); } }, TP.icon('pencil'), rv.auto ? 'Customise' : 'Edit'),
-        !rv.auto ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () { TP.confirm('Delete the review “' + rv.name + '”? Your Garmin activities aren’t affected.', 'Delete', function () { deleteReview(rv.id); B.close(); }); } }, 'Delete') : null,
+        !rv.auto ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () { TP.confirm('Delete the review “' + rv.name + '”? Your activities aren’t affected.', 'Delete', function () { deleteReview(rv.id); B.close(); }); } }, 'Delete') : null,
         TP.glossaryButton())));
     if (G.progress) root.appendChild(h('div', { class: 'sync-progress' }, G.progress));
     if (!G.loaded) { root.appendChild(h('p', { class: 'muted' }, 'Loading…')); return; }
     var r = B.result(rv);
     if (r.empty) {
-      root.appendChild(h('div', { class: 'empty' }, h('h3', null, r.error ? 'Couldn’t analyse this block' : 'No Garmin activities in this block yet'),
-        h('p', null, r.error || 'Sync the block’s dates from Garmin (Sync this block above) to see the review.')));
+      root.appendChild(h('div', { class: 'empty' }, h('h3', null, r.error ? 'Couldn’t analyse this block' : 'No activities in this block yet'),
+        h('p', null, r.error || 'Upload activities covering the block’s dates (Analysis → Upload history) to see the review.')));
       return;
     }
     var tabs = ['Summary', 'Training', 'Recovery', 'Taper & readiness', 'Weeks', 'Race'], box = h('div');
@@ -150,7 +150,7 @@
         h('div', { class: 'br-head' }, head)),
       h('div', null, h('div', { class: 'form-section' }, 'Training effectiveness'), Object.keys(r.components).map(function (k) {
         var f = r.fitness, note = k === 'fitness' ? sp('Fitness (CTL) %.0f → %.0f at its peak, %+.0f%%', f.start, f.peak, f.gain) +
-          (r.history_from && r.history_from > TP.addDays(r.start, -120) ? '. Your Garmin history starts ' + TP.fmt(r.history_from, '%d %b %Y') + ': upload earlier activities for a more accurate start.' : '') : null;
+          (r.history_from && r.history_from > TP.addDays(r.start, -120) ? '. Your activity history starts ' + TP.fmt(r.history_from, '%d %b %Y') + ': upload earlier activities for a more accurate start.' : '') : null;
         return bar(k, r.components[k], note);
       })),
       h('div', null, h('div', { class: 'form-section' }, 'Race execution'), r.race_components ? Object.keys(r.race_components).map(function (k) { return bar(k, r.race_components[k]); }) : h('p', { class: 'muted small' }, 'Available once the race activity is synced.'))));
@@ -225,17 +225,17 @@
   }
   function recovery(box, r) {
     var rc = r.recovery;
-    if (!rc) { box.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No sleep or HRV data for this block'), h('p', null, 'Sync the block from Garmin to fetch nightly sleep, overnight HRV and resting heart rate.'))); return; }
+    if (!rc) { box.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No sleep or HRV data for this block'), h('p', null, 'Upload a data export covering the block to add nightly sleep, overnight HRV and resting heart rate.'))); return; }
     var rf = A.recoveryFindings(rc), col = function (ok, warn) { return ok ? '#00a86b' : warn ? '#d99a00' : '#ff3b30'; };
     var tile = function (v, l, s, c) { return h('div', { class: 'kpi', style: 'border-left-color:' + c }, h('div', { class: 'kpi-v', style: 'color:' + c }, v), h('div', { class: 'kpi-l' }, l), s ? h('div', { class: 'kpi-s' }, s) : null); };
     var bands = [{ x0: TP.addDays(r.race_date, -14), x1: r.race_date, fill: '#fff6dd', label: 'final 2 weeks' }];
     box.appendChild(C.xy({ title: 'Daily training stress (TSS)', height: 130, x: { type: 'date', min: r.start, max: r.race_date }, y: { fmt: function (v) { return Math.round(v); }, zero: true, min: 0 },
       series: [{ name: 'TSS', col: '#9a9a9a', kind: 'bar', barW: 0.85, pts: r.load.map(function (d) { return [d.date, d.tss]; }), fmt: function (v) { return Math.round(v) + ' TSS'; } }], bands: bands }));
     var ch = CO.recoveryCharts(rc.daily, r.start, r.race_date, { bands: bands }); if (ch) box.appendChild(ch);
-    box.appendChild(h('p', { class: 'small' }, sp('Based on %d nights of Garmin sleep tracking during the block. Overnight HRV is the most sensitive sign of how well you’re absorbing training: it falls when stress outpaces recovery.', rc.nights)));
+    box.appendChild(h('p', { class: 'small' }, sp('Based on %d nights of sleep tracking during the block. Overnight HRV is the most sensitive sign of how well you’re absorbing training: it falls when stress outpaces recovery.', rc.nights)));
     box.appendChild(h('div', { class: 'kpis kpis-5' },
       tile(fin(rc.sleep_h) ? rc.sleep_h.toFixed(1) + ' h' : '–', 'Average sleep', fin(rc.short_nights) ? Math.round(rc.short_nights) + '% of nights under 7 h' : null, col(rc.sleep_h >= 8, rc.sleep_h >= 7)),
-      tile(fin(rc.sleep_score) ? Math.round(rc.sleep_score) : '–', 'Sleep score', 'Garmin, out of 100', col(rc.sleep_score >= 80, rc.sleep_score >= 70)),
+      tile(fin(rc.sleep_score) ? Math.round(rc.sleep_score) : '–', 'Sleep score', 'From your watch, out of 100', col(rc.sleep_score >= 80, rc.sleep_score >= 70)),
       tile(fin(rc.hrv) ? Math.round(rc.hrv) + ' ms' : '–', 'Overnight HRV', fin(rc.hrv_base) ? 'baseline ' + Math.round(rc.hrv_base) + ' ms' : null, col(rc.hrv_below_pct <= 15, rc.hrv_below_pct <= 30)),
       tile(fin(rc.hrv_below_pct) ? Math.round(rc.hrv_below_pct) + '%' : '–', 'Nights HRV low', 'below your normal range', col(rc.hrv_below_pct <= 15, rc.hrv_below_pct <= 30)),
       tile(fin(rc.rhr_drift) ? sp('%+.0f bpm', rc.rhr_drift) : '–', 'Resting HR change', fin(rc.rhr_first) ? sp('%.0f → %.0f bpm', rc.rhr_first, rc.rhr_last) : null, col(rc.rhr_drift < 2, rc.rhr_drift < 4))));

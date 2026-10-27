@@ -235,7 +235,7 @@
       var indoor = /indoor|virtual|treadmill|lap_swimming|pool|strength|trainer/.test(String(a.type || '')) ;
       if (!indoor && G.needsRefetch(a)) {
         box.appendChild(h('div', null, section('Route')));
-        var msg = h('p', { class: 'muted small' }, G.connected() ? 'Loading the route from Garmin…' : 'Connect Garmin and sync, or upload this activity’s FIT file in Analysis → Upload history, to see the route.');
+        var msg = h('p', { class: 'muted small' }, G.connected() ? 'Loading the route…' : 'Upload this activity’s FIT file in Analysis → Upload history to see the route.');
         box.appendChild(msg);
         if (G.connected()) G.refetch(a.id).then(function () { TP.render(); }).catch(function (e) {
           // "Load failed" (Safari) / "Failed to fetch" (Chrome): the relay couldn't be reached at all.

@@ -30,7 +30,7 @@
       TP.chips(PRESETS.map(function (x) { return { value: x.value, label: x.label }; }), TP.view.gperiod.preset, function (v) { TP.view.gperiod = { preset: v }; TP.changed(); }, 'seg'),
       h('div', { class: 'filter-custom' }, from, h('span', { class: 'muted' }, 'to'), to, apply)));
     var r = A.analyse(ctx.scored, ctx.feats, ctx.prof, per.from, per.to, TP.match.compliance(per.from, per.to));
-    if (r.empty) { root.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No activities in this period'), h('p', null, 'Pick another period, or sync it from Garmin above.'))); return; }
+    if (r.empty) { root.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No activities in this period'), h('p', null, 'Pick another period, or upload activities for it above.'))); return; }
     var last = r.load[r.load.length - 1], first = r.load[0], nW = Math.max(1, (TP.daysBetween(per.from, per.to) + 1) / 7);
     var hours = A.sum(r.acts.map(function (a) { return a.hours; })), tss = A.sum(r.acts.map(function (a) { return a.tss; }));
     // Charts first: fitness / fatigue / form and weekly load, then the numbers and the coach's report.
@@ -202,7 +202,7 @@
     }
     if (wa.planned.length) {
       root.appendChild(h('h3', { class: 'sec-h' }, 'Plan vs. done'));
-      root.appendChild(h('p', { class: 'muted small sec-sub' }, 'Planned sessions matched to what Garmin recorded. Click a session to open it.'));
+      root.appendChild(h('p', { class: 'muted small sec-sub' }, 'Planned sessions matched to what you recorded. Click a session to open it.'));
       root.appendChild(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
         h('thead', null, h('tr', null, h('th', null, 'Day'), h('th', null, 'Planned'), h('th', null, 'Plan'), h('th', null, 'What happened'))),
         h('tbody', null, wa.planned.map(function (s) {
@@ -247,7 +247,7 @@
     });
     if (!list.length) { TP.toast('None of these activities has a planner sport (Swim, Run, Bike, Hyrox or Strength).', 'warn'); return; }
     TP.clip.week = { start: wk, sessions: list };
-    TP.toast('Copied ' + list.length + ' Garmin sessions from the week of ' + TP.fmt(wk, '%d %b %Y') + '. In the Calendar, pick a day in the week you want and press Paste week.');
+    TP.toast('Copied ' + list.length + ' recorded sessions from the week of ' + TP.fmt(wk, '%d %b %Y') + '. In the Calendar, pick a day in the week you want and press Paste week.');
   };
 
   CO.list = function (items, kind) {
@@ -325,7 +325,7 @@
   function recovery(wellness, from, to) {
     var w = (wellness || []).filter(function (x) { return x.date >= from && x.date <= TP.addDays(to, 1); });
     if (w.filter(function (x) { return fin(x.sleep_h) || fin(x.hrv); }).length < 3) return null;
-    var p = panel('Sleep and recovery', 'Nightly sleep, overnight heart-rate variability and resting heart rate from Garmin. HRV falls when training stress outpaces recovery.');
+    var p = panel('Sleep and recovery', 'Nightly sleep, overnight heart-rate variability and resting heart rate from your watch. HRV falls when training stress outpaces recovery.');
     var m = function (k) { return A.mean(w.map(function (x) { return x[k]; })); };
     p.appendChild(h('div', { class: 'kpis kpis-4' }, kpi(fin(m('sleep_h')) ? m('sleep_h').toFixed(1) + ' h' : '–', 'Average sleep'), kpi(fin(m('sleep_score')) ? Math.round(m('sleep_score')) : '–', 'Sleep score'),
       kpi(fin(m('hrv')) ? Math.round(m('hrv')) + ' ms' : '–', 'Overnight HRV'), kpi(fin(m('rhr')) ? Math.round(m('rhr')) + ' bpm' : '–', 'Resting HR')));
@@ -333,7 +333,7 @@
     return p;
   }
   function compliance(c) {
-    var p = panel('Plan compliance', 'Planned sessions in this period that were due, and the Garmin activities linked to them.');
+    var p = panel('Plan compliance', 'Planned sessions in this period that were due, and the activities linked to them.');
     p.appendChild(h('div', { class: 'kpis kpis-3' }, kpi(Math.round(c.completion) + '%', 'Sessions completed', c.done + ' of ' + c.planned), kpi(Math.round(c.volume) + '%', 'Of planned distance'), kpi(c.planned - c.done, 'Missed')));
     p.appendChild(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('thead', null, h('tr', null, h('th', null, 'Sport'), h('th', { class: 'num' }, 'Done'), h('th', { class: 'num' }, 'Planned km'), h('th', { class: 'num' }, 'Actual km'))),
       h('tbody', null, c.by_disc.map(function (x) { return h('tr', null, h('td', null, x.disc), h('td', { class: 'num' }, x.done + ' / ' + x.planned), h('td', { class: 'num' }, Math.round(x.planned_km)), h('td', { class: 'num' }, Math.round(x.actual_km))); })))));
@@ -343,7 +343,7 @@
   // --- Thresholds ---
   CO.thresholds = function (root) {
     var ctx = TP.garmin.ctx(), prof = ctx.prof, ov = Object.assign({}, ctx.overrides), gp = ctx.garminProfile || {};
-    var p = panel('Your thresholds', 'Training stress, zones and race predictions are worked out from these. They’re estimated from your activities (and Garmin’s own settings); enter a tested value to use that instead. Saved with your account.');
+    var p = panel('Your thresholds', 'Training stress, zones and race predictions are worked out from these. They’re estimated from your activities (and your watch’s own settings); enter a tested value to use that instead. Saved with your account.');
     var src = prof.sources, rows = [
       ['lthr', 'Threshold heart rate', 'bpm', prof.lthr, src.lthr],
       ['hrmax', 'Maximum heart rate', 'bpm', prof.hrmax, src.hrmax],
@@ -358,7 +358,7 @@
         inputs[r[0]] = { el: inp, pace: r[5] };
         return h('tr', null, h('td', null, h('b', null, r[1])), h('td', { class: 'num' }, r[3] + ' ' + r[2]), h('td', { class: 'small muted' }, r[4] || ''), h('td', null, h('span', { class: 'thr-in' }, inp, h('span', { class: 'muted small' }, r[2]))));
       })))));
-    var gender = TP.selectEl([{ value: '', label: 'From Garmin (' + (gp.gender ? String(gp.gender).toLowerCase() : 'not set') + ')' }, { value: 'MALE', label: 'Male' }, { value: 'FEMALE', label: 'Female' }], ov.gender || '', { class: 'inp inp-sm' });
+    var gender = TP.selectEl([{ value: '', label: 'From your watch (' + (gp.gender ? String(gp.gender).toLowerCase() : 'not set') + ')' }, { value: 'MALE', label: 'Male' }, { value: 'FEMALE', label: 'Female' }], ov.gender || '', { class: 'inp inp-sm' });
     p.appendChild(h('div', { class: 'thr-g' }, h('span', { class: 'small' }, 'Sex (for heart-rate training stress):'), gender));
     p.appendChild(h('div', { class: 'btn-row', style: 'margin-top:12px' },
       h('button', { class: 'btn btn-primary', onclick: function () {

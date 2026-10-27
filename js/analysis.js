@@ -665,7 +665,7 @@
     src.hrmax = hr5.length ? 'highest 5-s HR in your data' : 'default';
 
     var lthr = num(gp.lthr);
-    if (lthr && lthr > 100) src.lthr = 'Garmin lactate threshold';
+    if (lthr && lthr > 100) src.lthr = 'Watch lactate threshold';
     else {
       var hr20 = idx.map(function (r) { return F(r).hr20; }).filter(fin);
       lthr = hr20.length ? max(hr20) : 0.89 * hrmax;
@@ -676,7 +676,7 @@
     var bikes = idx.filter(function (r) { return r.discipline === 'Bike'; });
     var mmps = bikes.map(function (r) { return F(r).mmp; }).filter(Boolean);
     var ftp = num(gp.ftp);
-    if (ftp && ftp > 50) src.ftp = 'Garmin FTP';
+    if (ftp && ftp > 50) src.ftp = 'Watch FTP';
     else if (mmps.length) {
       var best = colMax(mmps, MMP_D.length), cp = cpModel(MMP_D, best), p20 = best[MMP_D.indexOf(1200)];
       if (cp && cp.r2 > 0.95) { ftp = 0.97 * cp.cp; src.ftp = '97% of modelled critical power'; }
@@ -696,7 +696,7 @@
     var lts = num(gp.lt_speed), thr;
     if (lts && lts > 0 && lts < 1.5) lts *= 10;   // Garmin stores LT speed in 0.1 m/s units in some regions
     var runs = idx.filter(function (r) { return r.discipline === 'Run'; }), rmats = runs.map(function (r) { return F(r).mmp_speed; }).filter(Boolean);
-    if (lts && lts > 2 && lts < 7) { thr = lts; src.thr_speed = 'Garmin lactate threshold pace'; }
+    if (lts && lts > 2 && lts < 7) { thr = lts; src.thr_speed = 'Watch lactate threshold pace'; }
     else if (rmats.length) {
       var rb = colMax(rmats, RUN_D.length), cs = cpModel(RUN_D, rb, 180, 1200), s30 = rb[RUN_D.indexOf(1800)];
       if (cs && cs.r2 > 0.95 && cs.cp > 2) { thr = 0.97 * cs.cp; src.thr_speed = '97% of modelled critical speed'; }
@@ -728,7 +728,7 @@
 
     var rhr = (wellness || []).map(function (w) { return w.rhr; }).filter(fin);
     var hrrest = rhr.length >= 7 ? median(rhr.slice(-60)) : 50;
-    src.hrrest = rhr.length >= 7 ? 'Garmin resting HR, last 60 nights' : 'default';
+    src.hrrest = rhr.length >= 7 ? 'Resting HR from your watch, last 60 nights' : 'default';
 
     // Personal open-water gap: medians of recent open-water vs pool swims.
     var all = idx.filter(function (r) { return r.discipline === 'Swim' && r.distance_m >= 500 && r.moving_s > 0 && r.date >= addDays(lastDate, -112); });
@@ -795,7 +795,7 @@
       }
       if (!fin(r.tss)) {
         if (hist) { r.tss = hrtss(hist, prof); r.tss_method = 'hrTSS (TRIMP)'; }
-        else if (fin(a.garmin_tss)) { r.tss = a.garmin_tss; r.tss_method = 'Garmin TSS'; }
+        else if (fin(a.garmin_tss)) { r.tss = a.garmin_tss; r.tss_method = 'Watch TSS'; }
         else if (fin(a.avg_hr) && hours > 0) { r.tss = hours * 60 * trimpPerMin(a.avg_hr, prof) / (60 * trimpPerMin(prof.lthr, prof)) * 100; r.tss_method = 'hrTSS (avg HR estimate)'; }
         else { r.tss = hours * 40; r.tss_method = 'estimated (duration only)'; }
         if (!fin(r.intensity) && fin(a.avg_hr)) r.intensity = a.avg_hr / prof.lthr;
@@ -1072,7 +1072,7 @@
     }
     var vo2 = acts.filter(function (a) { return fin(a.vo2max); });
     if (vo2.length >= 2) { var dv = vo2[vo2.length - 1].vo2max - vo2[0].vo2max;
-      add('Aerobic fitness', dv > 0 ? 'good' : dv < 0 ? 'watch' : 'info', sprintf('Garmin VO2max %.0f → %.0f', vo2[0].vo2max, vo2[vo2.length - 1].vo2max), 'Firstbeat estimate from HR/pace or power relationship.'); }
+      add('Aerobic fitness', dv > 0 ? 'good' : dv < 0 ? 'watch' : 'info', sprintf('VO2max (watch estimate) %.0f → %.0f', vo2[0].vo2max, vo2[vo2.length - 1].vo2max), 'Firstbeat estimate from HR/pace or power relationship.'); }
     var cmp = r.compliance;
     if (cmp && cmp.planned > 0) add('Plan compliance', cmp.completion >= 85 ? 'good' : cmp.completion >= 70 ? 'watch' : 'risk',
       sprintf('%.0f%% of planned sessions completed, %.0f%% of planned volume', cmp.completion, cmp.volume),
@@ -1815,7 +1815,7 @@
     if (to < start) return { empty: true, reason: "The block hasn't started yet." };
     var discs = A.BLOCK_DISCIPLINES[raceType] || ['Run', 'Bike', 'Swim'];
     var acts = scored.filter(function (a) { return a.date >= start && a.date <= to && a.discipline !== 'Transition'; }), hist = A.loadModel(scored, start, to);
-    if (!hist.length) return { empty: true, reason: 'No Garmin activities yet.' };
+    if (!hist.length) return { empty: true, reason: 'No activities yet.' };
     // Planned load still to come: each session's hours x your typical TSS per hour for that sport.
     var rec = scored.filter(function (a) { return a.date >= addDays(today, -120) && a.hours > 0.25; }), rate = Object.assign({}, DEFAULT_TSS_H);
     Object.keys(rate).forEach(function (d) { var v = rec.filter(function (a) { return a.discipline === d; }).map(function (a) { return a.tss / a.hours; }).filter(fin); if (v.length >= 5) rate[d] = median(v); });
@@ -1921,7 +1921,7 @@
     var mins = Math.round((a.moving_s || 0) / 60);
     var bits = [s.label || null, mins > 0 ? mins + ' min' : null, fin(a.avg_hr) ? 'avg HR ' + Math.round(a.avg_hr) : null, disc === 'Bike' && fin(a.np) ? Math.round(a.np) + ' W NP' : null].filter(Boolean);
     var byTime = pd === 'Strength' || pd === 'Hyrox' || km === 0;
-    return { discipline: pd, type: pt, details: 'From Garmin: ' + (a.name || 'activity') + ' (' + TP.fmt(a.date, '%d %b %Y') + '). ' + bits.join(' · ') + '.',
+    return { discipline: pd, type: pt, details: 'Recorded: ' + (a.name || 'activity') + ' (' + TP.fmt(a.date, '%d %b %Y') + '). ' + bits.join(' · ') + '.',
       wu_cd_check: wu + cd > 0, wu_dist: wu, cd_dist: cd, total_dist: km, num_sets: 1, main_dist_1: Math.max(0, Math.round((km - wu - cd) * 100) / 100),
       main_dist_2: 0, main_dist_3: 0, main_dist_4: 0, main_dist_5: 0, plan_by: byTime ? 'Time' : 'Distance', duration_min: byTime ? mins : null };
   };

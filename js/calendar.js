@@ -118,7 +118,7 @@
   function doneChip(a, k, s) {
     var amt = a.distance_m > 50 ? TP.round(a.distance_m / 1000, 1) + ' km' : a.moving_s ? Math.round(a.moving_s / 60) + ' min' : '';
     return h('div', { class: 'mchip mchip-act mchip-' + k, style: 'border-left-color:' + (TP.SPORT_COLOURS[a.sport] || TP.typeCol(s.type)),
-      title: 'Garmin: ' + (a.name || a.type) + ' — ' + TP.match.STATUS_LABEL[k].toLowerCase() + ' (planned: ' + TP.sessionName(s) + ', ' + TP.planAmount(s) + ')',
+      title: 'Activity: ' + (a.name || a.type) + ' — ' + TP.match.STATUS_LABEL[k].toLowerCase() + ' (planned: ' + TP.sessionName(s) + ', ' + TP.planAmount(s) + ')',
       onclick: stop(function () { TP.select(a.date); TP.activityView(a.id); }) },
       h('span', { class: 'mchip-tick' }, TP.match.STATUS_ICON[k]), h('span', { class: 'mchip-t' }, a.name || a.sport), h('span', { class: 'mchip-d' }, amt));
   }
@@ -240,7 +240,7 @@
       var linked = TP.match.sessionObjForAct(a.id), st = linked && TP.match.status(linked), k = st ? st.st : '';
       root.appendChild(h('button', { class: 'list-item', onclick: function () { TP.activityView(a.id); } },
         h('span', { class: 'dot dot-act', style: 'border-color:' + (TP.SPORT_COLOURS[a.sport] || '#8a8a8a') }),
-        h('span', { class: 'grow' }, a.name || a.type, h('span', { class: 'muted small' }, linked ? ' · planned ' + TP.sportLabel(linked.discipline) + ' ' + linked.type : ' · Garmin')),
+        h('span', { class: 'grow' }, a.name || a.type, h('span', { class: 'muted small' }, linked ? ' · planned ' + TP.sportLabel(linked.discipline) + ' ' + linked.type : ' · activity')),
         TP.match.STATUS_ICON[k] ? h('span', { class: 'st-tick st-' + k, title: TP.match.STATUS_LABEL[k] }, TP.match.STATUS_ICON[k]) : null,
         h('span', { class: 'muted' }, TP.match.actAmount(a))));
     });

@@ -19,7 +19,7 @@
   var STORES = ['acts', 'streams', 'feats', 'wellness'];
   var dbp = null, wiped = false;
   function db() {
-    if (wiped) return Promise.reject(new Error('Garmin data has been removed from this device.'));
+    if (wiped) return Promise.reject(new Error('Activity data has been removed from this device.'));
     if (!dbp) dbp = new Promise(function (res, rej) {
       var r = indexedDB.open(dbName(), 2);
       r.onupgradeneeded = function () {
@@ -106,6 +106,10 @@
   // --- Connection ---
   G.key = function () { try { return localStorage.getItem(storeKey(KEY)) || ''; } catch (e) { return ''; } };
   G.connected = function () { return !!G.key(); };
+  // The personal API key is for each person's own data, so connecting one is only offered to the
+  // accounts that existed before this cut-off (the site's developers); everyone else uploads an export.
+  var API_KEY_CUTOFF = Date.parse('2026-10-27T18:00:00Z');
+  G.apiAllowed = function () { var u = TP.cloud && TP.cloud.user; return !!(u && u.created && u.created < API_KEY_CUTOFF); };
   function jwtExp(t) { try { return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).exp * 1000; } catch (e) { return Date.now() + 23 * 3600e3; } }
   // The key is swapped for an access token that lasts up to 24 hours; a new one is fetched when needed.
   function token(force) {
@@ -138,6 +142,7 @@
     });
   }
   G.connect = function (key) {
+    if (!G.apiAllowed()) return Promise.reject(new Error('Connecting with an API key isn’t available. Upload your data export instead.'));
     key = key.trim();
     if (key.length < 10) return Promise.reject(new Error('That doesn’t look like a complete API key.'));
     localStorage.setItem(storeKey(KEY), key); localStorage.removeItem(storeKey(TOKEN));
@@ -168,9 +173,9 @@
     var tick = TP.input('checkbox', ''), ok = h('button', { class: 'btn btn-primary', disabled: true, onclick: function () { giveConsent(); m.close(); fn(); } }, 'Agree and continue');
     tick.onchange = function () { ok.disabled = !tick.checked; };
     var cloud = TP.cloud && TP.cloud.enabled && TP.cloud.user;
-    var m = TP.modal({ size: 'm', stack: true, title: h('div', { class: 'md-t' }, 'Using your Garmin health data'),
+    var m = TP.modal({ size: 'm', stack: true, title: h('div', { class: 'md-t' }, 'Using your activity and health data'),
       body: [
-        h('p', null, 'To show your training load, fitness, recovery and race readiness, Training Planner reads this from Garmin:'),
+        h('p', null, 'To show your training load, fitness, recovery and race readiness, Training Planner reads this from the activity data you add:'),
         h('ul', { class: 'small' },
           h('li', null, 'your activities, with heart rate, power, pace, cadence, elevation, laps and GPS routes, second by second;'),
           h('li', null, 'sleep, resting heart rate and heart-rate variability (HRV) by day.')),
@@ -178,15 +183,15 @@
           h('b', null, 'It’s kept in this browser on this device. '),
           cloud ? 'Your training thresholds, block reviews and links between sessions and activities are saved to your account so they appear on your other devices. ' : '',
           'It’s used only for your own analysis. It’s never sold, shared or used for advertising.'),
-        h('p', { class: 'small' }, 'You can withdraw your consent at any time in Settings → Garmin analysis → Withdraw consent, which deletes the Garmin data on this device. ',
+        h('p', { class: 'small' }, 'You can withdraw your consent at any time in Settings → Activity analysis → Withdraw consent, which deletes the activity data on this device. ',
           h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy')),
-        h('label', { class: 'check consent-check' }, tick, 'I agree to Training Planner using my Garmin health data as described above.')],
+        h('label', { class: 'check consent-check' }, tick, 'I agree to Training Planner using my activity and health data as described above.')],
       footer: [h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Not now'), ok] });
   };
   // Removes the consent record, the API key and everything stored on this device.
   G.withdrawConsent = function () {
     G.disconnect(); TP.mine.set(CONSENT, {});
-    return G.clearActs().then(function () { TP.toast('Consent withdrawn. Garmin data on this device has been deleted.'); });
+    return G.clearActs().then(function () { TP.toast('Consent withdrawn. Activity data on this device has been deleted.'); });
   };
   // Garmin data stored before consent was asked for (or before the wording changed): ask once per visit.
   var askedOnce = false;
@@ -199,12 +204,12 @@
   function consentPanel() {
     return h('div', { class: 'panel consent-panel' },
       h('div', { class: 'panel-h' }, 'Your permission is needed'),
-      h('p', { class: 'small' }, 'There are ' + G.acts.length + ' Garmin activities stored on this device. Heart rate, sleep and HRV are health data, so the analysis needs your permission to use them.'),
+      h('p', { class: 'small' }, 'There are ' + G.acts.length + ' activities stored on this device. Heart rate, sleep and HRV are health data, so the analysis needs your permission to use them.'),
       h('div', { class: 'btn-row' },
         h('button', { class: 'btn btn-primary', onclick: function () { G.withConsent(function () { TP.changed(); }); } }, 'Review and agree'),
         h('button', { class: 'btn btn-outline-danger', onclick: function () {
-          TP.confirm('Delete the Garmin activities and sleep data stored on this device? They stay on Garmin.', 'Delete', function () { G.withdrawConsent(); });
-        } }, TP.icon('trash'), 'Delete Garmin data from this device')));
+          TP.confirm('Delete the activities and sleep data stored on this device? You can upload them again later.', 'Delete', function () { G.withdrawConsent(); });
+        } }, TP.icon('trash'), 'Delete activity data from this device')));
   }
 
   // --- Activities ---
@@ -418,7 +423,7 @@
   G.refetch = function (id) {
     var a = G.acts.filter(function (x) { return x.id === id; })[0];
     if (!a || !G.connected()) return Promise.reject(new Error('Connect Garmin to load this.'));
-    if (!G.consented()) return Promise.reject(new Error('Agree to Training Planner using your Garmin data (in Analysis) to load this.'));
+    if (!G.consented()) return Promise.reject(new Error('Agree to Training Planner using your activity data (in Analysis) to load this.'));
     return api('/download-service/files/activity/' + id, true).then(unzip).then(function (bytes) {
       var st = parseFit(id, bytes); a.fit = true; a.fitv = FIT_VERSION; delete G.frecs[id];
       return (st ? putAll('streams', [st]) : Promise.resolve()).then(function () { return putAll('acts', [a]); })
@@ -485,7 +490,7 @@
     // First time: the full instructions. After that, one line to sync (or reconnect).
     if (!G.connected() && !G.acts.length) {
       root.appendChild(G.importCard());
-      root.appendChild(h('div', { class: 'sync-bar' }, h('span', { class: 'small grow muted' }, 'Have a Garmin personal API key? Connect it to sync new activities automatically.'),
+      if (G.apiAllowed()) root.appendChild(h('div', { class: 'sync-bar' }, h('span', { class: 'small grow muted' }, 'Have a Garmin personal API key? Connect it to sync new activities automatically.'),
         h('button', { class: 'btn btn-sm', onclick: function () { showConnect = !showConnect; TP.changed(); } }, showConnect ? 'Hide' : 'Connect with API key')));
       if (showConnect) root.appendChild(connectCard());
     } else root.appendChild(syncBar());
@@ -499,7 +504,7 @@
       try {
         if (!G.loaded) body.appendChild(h('p', { class: 'muted' }, 'Loading…'));
         else if (G.acts.length && G.consentKnown() && !G.consented()) body.appendChild(consentPanel());
-        else if (!G.acts.length) body.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No Garmin activities yet'), h('p', null, G.connected() ? 'Sync from Garmin above. Twelve weeks or more gives the analysis enough to work with.' : 'Connect Garmin above, then sync.')));
+        else if (!G.acts.length) body.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No activities yet'), h('p', null, G.connected() ? 'Sync from Garmin above. Twelve weeks or more gives the analysis enough to work with.' : 'Upload your activity history above.')));
         else if (TP.view.gtab === 'Block reviews') TP.blocks.render(body);
         else TP.coach.render(body);
       } catch (e) { console.error(e); body.appendChild(h('div', { class: 'panel' }, 'Something went wrong drawing this page: ' + e.message)); }
@@ -519,9 +524,9 @@
   G.statusButton = function () {
     var on = G.connected(), last = G.lastSynced();
     var b = h('button', { class: 'btn btn-sm g-status ' + (on ? 'g-on' : 'g-off'), disabled: !!G.syncing,
-      title: on ? 'Garmin connected' + (last ? ', synced to ' + TP.fmt(last, '%d %b') : '') + '. Press to sync.' : 'Garmin not connected. Press to upload your Garmin data or connect.',
+      title: on ? 'Garmin connected' + (last ? ', synced to ' + TP.fmt(last, '%d %b') : '') + '. Press to sync.' : 'Press to upload your activity data.',
       onclick: function () { if (on) G.quickSync(); else TP.go('garmin'); } },
-      h('i', { class: 'g-dot' }), G.syncing ? 'Syncing…' : 'Garmin');
+      h('i', { class: 'g-dot' }), G.syncing ? 'Syncing…' : on ? 'Garmin' : 'Activities');
     return h('div', { class: 'g-status-wrap' }, b, G.progress ? h('div', { class: 'g-status-msg' }, G.progress) : null);
   };
   var showOptions = false, showConnect = false, showImport = false;
@@ -529,15 +534,15 @@
   function withImport(wrap) { if (showImport || G.importing()) wrap.appendChild(G.importCard()); return wrap; }
   // The one-line sync bar (new users get a link to the connection instructions instead).
   G.syncBar = function () {
-    if (!G.connected() && !G.acts.length) return h('div', { class: 'sync-bar' }, h('span', { class: 'small grow' }, h('b', null, 'Connect Garmin'), h('span', { class: 'muted' }, ' to see your training, fitness and health here.')),
-      h('button', { class: 'btn btn-sm btn-primary', onclick: function () { TP.go('garmin'); } }, 'Connect'));
+    if (!G.connected() && !G.acts.length) return h('div', { class: 'sync-bar' }, h('span', { class: 'small grow' }, h('b', null, 'Add your activities'), h('span', { class: 'muted' }, ' to see your training, fitness and health here.')),
+      h('button', { class: 'btn btn-sm btn-primary', onclick: function () { TP.go('garmin'); } }, 'Upload'));
     return syncBar();
   };
   function syncBar() {
     var last = G.lastSynced(), today = TP.today();
     if (!G.connected()) {
-      var bar0 = h('div', { class: 'sync-bar' }, h('span', { class: 'muted small grow' }, G.acts.length + ' Garmin activities stored on this device'), importBtn(),
-        h('button', { class: 'btn btn-sm', onclick: function () { showConnect = !showConnect; TP.changed(); } }, showConnect ? 'Hide' : 'Connect Garmin'));
+      var bar0 = h('div', { class: 'sync-bar' }, h('span', { class: 'muted small grow' }, G.acts.length + ' activities stored on this device'), importBtn(),
+        !G.apiAllowed() ? null : h('button', { class: 'btn btn-sm', onclick: function () { showConnect = !showConnect; TP.changed(); } }, showConnect ? 'Hide' : 'Connect Garmin'));
       return withImport(showConnect ? h('div', null, bar0, connectCard()) : h('div', null, bar0));
     }
     var quick = h('button', { class: 'btn btn-sm btn-primary', disabled: !!G.syncing, onclick: G.quickSync }, TP.icon('download'), G.syncing ? 'Syncing…' : 'Sync');

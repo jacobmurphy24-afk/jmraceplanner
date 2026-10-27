@@ -243,7 +243,7 @@
     var pr = TP.reportProgress(rb.id);
     if (pr.empty) return h('p', { class: 'muted' }, pr.reason);
     var n = pr.now, rp = pr.race_proj, out = h('div');
-    out.appendChild(h('p', { class: 'muted small' }, 'Based on your Garmin activities up to ' + TP.fmt(pr.to, '%d %b') + (pr.to < rb.race_date ? ', and the sessions still planned from then to race day.' : '.')));
+    out.appendChild(h('p', { class: 'muted small' }, 'Based on your activities up to ' + TP.fmt(pr.to, '%d %b') + (pr.to < rb.race_date ? ', and the sessions still planned from then to race day.' : '.')));
     var vl = [{ x: rb.race_date, col: '#111', label: 'race' }]; if (pr.to < rb.race_date) vl.push({ x: TP.addDays(pr.to, 1), col: '#111', dash: '4 3', label: 'today' });
     var pa = CO.panel('Fitness, fatigue and form across the block', 'Solid is what you’ve done; dashed is where the planned sessions take you (estimated from your usual training stress per hour in each sport).');
     pa.appendChild(CO.pmcChart(pr.load, { vlines: vl, bands: [{ x0: TP.addDays(rb.race_date, -14), x1: rb.race_date, fill: '#fff6dd', label: 'final 2 weeks' }] }));
@@ -272,7 +272,7 @@
     var adv = A.planAdvice(facts, hist.rows, rb.p.race_type, hist.changes, rb.p.priority);
     var ST = { change: ['→', '#d99a00'], review: ['i', '#2b4dff'], keep: ['✓', '#00a86b'] };
     return h('div', null,
-      h('p', { class: 'muted small' }, hist.rows.length ? 'Compared with ' + hist.rows.length + ' previous block' + (hist.rows.length > 1 ? 's' : '') + ' with Garmin data.' : 'No finished blocks with Garmin data yet, so these checks use the plan alone.'),
+      h('p', { class: 'muted small' }, hist.rows.length ? 'Compared with ' + hist.rows.length + ' previous block' + (hist.rows.length > 1 ? 's' : '') + ' with activity data.' : 'No finished blocks with activity data yet, so these checks use the plan alone.'),
       adv.map(function (x) {
         var st = ST[x.kind];
         return h('div', { class: 'check-row' }, h('span', { class: 'sev', style: 'background:' + st[1] }, st[0]), h('div', { class: 'grow' }, h('b', null, x.title), h('div', { class: 'small' }, x.detail)));

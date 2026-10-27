@@ -1,11 +1,11 @@
 // Offline support. Online, every file is fetched fresh first, so an update shows the first time the
 // app is opened; the copy is saved as it arrives. With no signal (or a connection so slow it doesn't
 // answer within a few seconds), the saved copy is used instead, so the app still opens offline.
-var CACHE = 'tp-v31';
+var CACHE = 'tp-v32';
 var TIMEOUT_MS = 4000;
 var FILES = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'js/constants.js', 'js/store.js', 'js/ui.js',
              'js/charts.js', 'js/analysis.js', 'js/calendar.js', 'js/forms.js', 'js/reports.js', 'js/cloud.js', 'js/account.js', 'js/match.js', 'js/garmin.js',
-             'js/import.js', 'js/pages.js', 'js/activity.js', 'js/coach.js', 'js/blocks.js', 'js/myweek.js', 'js/app.js', 'garmin-guide.html', 'privacy.html',
+             'js/import.js', 'js/pages.js', 'js/activity.js', 'js/coach.js', 'js/blocks.js', 'js/myweek.js', 'js/app.js', 'privacy.html',
              'js/firebase-config.js', 'vendor/firebase.js', 'vendor/fitsdk.js', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {

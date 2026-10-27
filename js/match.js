@@ -170,7 +170,7 @@
     sugg.forEach(function (x) { asked[x.sid + '|' + x.aid] = 1; });
     var byId = M.compute().byId, rows = h('div', { class: 'sugg-list' });
     var m = TP.modal({ size: 'm', title: h('div', null, h('div', { class: 'md-t' }, 'Was this your planned session?'),
-      h('div', { class: 'md-sub' }, sugg.length === 1 ? 'A Garmin activity was done on a different day from the session planned that week.' : sugg.length + ' Garmin activities were done on a different day from sessions planned that week.')),
+      h('div', { class: 'md-sub' }, sugg.length === 1 ? 'An activity was done on a different day from the session planned that week.' : sugg.length + ' activities were done on a different day from sessions planned that week.')),
       body: rows, footer: h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Decide later') });
     function draw() {
       TP.clear(rows);
@@ -180,7 +180,7 @@
         var s = TP.state.sessions.filter(function (y) { return y.id === x.sid; })[0], a = byId[x.aid]; if (!s || !a) { x.done = true; return; }
         rows.appendChild(h('div', { class: 'sugg' },
           h('div', { class: 'sugg-pair' },
-            h('div', { class: 'sugg-side' }, h('div', { class: 'lbl' }, 'Garmin activity'), h('b', null, a.name || a.type), h('div', { class: 'muted small' }, TP.fmt(a.date, '%A %d %b') + ' · ' + actAmount(a))),
+            h('div', { class: 'sugg-side' }, h('div', { class: 'lbl' }, 'Activity'), h('b', null, a.name || a.type), h('div', { class: 'muted small' }, TP.fmt(a.date, '%A %d %b') + ' · ' + actAmount(a))),
             h('div', { class: 'sugg-arrow' }, '→'),
             h('div', { class: 'sugg-side' }, h('div', { class: 'lbl' }, 'Planned session'), h('b', null, h('span', { class: 'sdot', style: 'background:' + TP.typeCol(s.type) }), TP.sessionName(s, ' · ')),
               h('div', { class: 'muted small' }, TP.fmt(s.date, '%A %d %b') + (TP.planAmount(s) ? ' · ' + TP.planAmount(s) : '')))),
@@ -205,7 +205,7 @@
     var c = M.compute(), wk = TP.weekStart(s.date), from = TP.addDays(wk, -7), to = TP.addDays(wk, 13);
     var list = TP.garmin.acts.filter(function (a) { return a.date >= from && a.date <= to; })
       .sort(function (a, b) { return (fits(s, b) - fits(s, a)) || Math.abs(TP.daysBetween(a.date, s.date)) - Math.abs(TP.daysBetween(b.date, s.date)); });
-    var m = TP.modal({ size: 'm', stack: true, title: h('div', null, h('div', { class: 'md-t' }, 'Link a Garmin activity'),
+    var m = TP.modal({ size: 'm', stack: true, title: h('div', null, h('div', { class: 'md-t' }, 'Link an activity'),
       h('div', { class: 'md-sub' }, TP.sessionName(s, ' · ') + ' planned for ' + TP.fmt(s.date, '%A %d %b'))),
       body: list.length ? h('div', { class: 'pick-list' }, list.map(function (a) {
         var other = c.byAct[a.id] && c.byAct[a.id] !== sid ? TP.state.sessions.filter(function (x) { return x.id === c.byAct[a.id]; })[0] : null;
@@ -213,7 +213,7 @@
           h('span', { class: 'dot', style: 'background:' + (TP.SPORT_COLOURS[a.sport] || '#a0a0a0') }),
           h('span', { class: 'grow' }, h('b', null, a.name || a.type), h('div', { class: 'muted small' }, TP.fmt(a.date, '%a %d %b') + ' · ' + actAmount(a) + (other ? ' · now linked to ' + TP.sportLabel(other.discipline) + ' ' + other.type + ' (' + TP.fmt(other.date, '%a') + ')' : ''))),
           TP.fmt(a.date, '%d %b') === TP.fmt(s.date, '%d %b') ? h('span', { class: 'tag' }, 'same day') : null);
-      })) : h('p', { class: 'muted' }, 'No Garmin activities from ' + TP.fmt(from, '%d %b') + ' to ' + TP.fmt(to, '%d %b') + '. Sync that period on the Analysis page first.'),
+      })) : h('p', { class: 'muted' }, 'No activities from ' + TP.fmt(from, '%d %b') + ' to ' + TP.fmt(to, '%d %b') + '. Sync that period on the Analysis page first.'),
       footer: h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Cancel') });
   };
   // Pick a planned session for a Garmin activity.
@@ -240,7 +240,7 @@
     if (l) {
       var a = l.act, sc = G.scoredFor(a.id), tss = sc.reduce(function (t, x) { return t + (x.tss || 0); }, 0);
       return h('div', { class: 'panel g-link' },
-        h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Done on Garmin'), chip),
+        h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Recorded activity'), chip),
         h('button', { class: 'list-item', onclick: function () { TP.activityView(a.id); } },
           h('span', { class: 'dot', style: 'background:' + (TP.SPORT_COLOURS[a.sport] || '#a0a0a0') }),
           h('span', { class: 'grow' }, h('b', null, a.name || a.type), h('div', { class: 'muted small' }, TP.fmt(a.date, '%a %d %b') + ' · ' + actAmount(a) + (a.avg_hr ? ' · avg HR ' + Math.round(a.avg_hr) : '') + (sc.length ? ' · ' + Math.round(tss) + ' TSS' : ''))),
@@ -253,10 +253,10 @@
     }
     var sugg = M.compute().suggestions.filter(function (x) { return x.sid === s.id; })[0];
     return h('div', { class: 'panel g-link' },
-      h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Garmin'), chip),
-      st && st.st === 'missed' ? h('p', { class: 'small' }, 'No Garmin activity matched this session. If you did it on another day or logged it as a different sport, link it here.') :
+      h('div', { class: 'panel-top' }, h('div', { class: 'panel-h' }, 'Recorded activity'), chip),
+      st && st.st === 'missed' ? h('p', { class: 'small' }, 'No recorded activity matched this session. If you did it on another day or logged it as a different sport, link it here.') :
         h('p', { class: 'small muted' }, s.date > TP.today() ? 'Once you’ve done it and synced, the activity is linked automatically.' : 'No activity linked yet.'),
       sugg ? h('div', { class: 'hint' }, 'Possible match: ' + (M.compute().byId[sugg.aid].name || 'an activity') + ' on ' + TP.fmt(M.compute().byId[sugg.aid].date, '%a %d %b') + '.') : null,
-      s.date <= TP.addDays(TP.today(), 0) ? h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm btn-primary', onclick: function () { M.pickActivity(s.id); } }, TP.icon('activity'), 'Link a Garmin activity')) : null);
+      s.date <= TP.addDays(TP.today(), 0) ? h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm btn-primary', onclick: function () { M.pickActivity(s.id); } }, TP.icon('activity'), 'Link an activity')) : null);
   };
 })(window.TP);

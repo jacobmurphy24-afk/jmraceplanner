@@ -83,7 +83,7 @@
     ['Riegel', 'Riegel’s formula: predicts a race time over one distance from a result over another, assuming you slow slightly as distance grows.'],
     ['Fade', 'Slowing down over the final part of a race or session compared with the start.', 1],
     ['Negative split', 'Finishing the second half faster than the first: usually the sign of well-judged pacing.', 1],
-    ['VO2max', 'The most oxygen your body can use during all-out exercise: a measure of aerobic engine size. Garmin estimates it from runs and rides.'],
+    ['VO2max', 'The most oxygen your body can use during all-out exercise: a measure of aerobic engine size. Many sports watches estimate it from runs and rides.'],
     ['Cadence', 'Steps per minute when running, or pedal revolutions per minute when cycling.', 1],
     ['Sweet spot', 'Cycling effort just below threshold (about 88–94% of FTP): a time-efficient way to build fitness.', 1]
   ].map(function (g) { return { term: g[0], def: g[1], ci: !!g[2] }; });
