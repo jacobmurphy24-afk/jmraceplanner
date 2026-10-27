@@ -29,6 +29,7 @@
     }
     var sd = TP.clear(document.getElementById('side-day')); TP.renderDay(sd);
     TP.renderAccount();
+    if (TP.garmin) TP.garmin.askIfNeeded();
     if (Object.keys(sideways).length) {
       var seen1 = {}; main.querySelectorAll(SIDEWAYS).forEach(function (el) { var k = keyOf(el, seen1); if (sideways[k]) el.scrollLeft = sideways[k]; });
     }
@@ -56,8 +57,11 @@
           } }, TP.icon('heart'), 'Training thresholds'),
           TP.garmin && TP.garmin.acts.length ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
             TP.confirm('Delete the ' + TP.garmin.acts.length + ' Garmin activities and sleep data stored on this device? They stay on Garmin and can be synced again.', 'Delete', function () { TP.garmin.clearActs(); m.close(); });
-          } }, TP.icon('trash'), 'Clear stored Garmin activities') : null),
-        h('p', { class: 'hint' }, 'Garmin activities are kept only on this device. ', h('a', { href: 'garmin-guide.html', target: '_blank', rel: 'noopener' }, 'How to upload your Garmin history'), ' · ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy')),
+          } }, TP.icon('trash'), 'Clear stored Garmin activities') : null,
+          TP.garmin && (TP.garmin.consented() || TP.garmin.acts.length || TP.garmin.connected()) ? h('button', { class: 'btn btn-sm btn-outline-danger', onclick: function () {
+            TP.confirm('Withdraw your consent to Training Planner using your Garmin health data? The Garmin connection and all Garmin data on this device are deleted, and you’ll be asked again before anything is read from Garmin. Your Garmin account isn’t affected.', 'Withdraw', function () { TP.garmin.withdrawConsent(); m.close(); });
+          } }, 'Withdraw consent') : null),
+        h('p', { class: 'hint' }, 'Garmin activities are kept only on this device. ' + (TP.garmin && TP.garmin.consented() ? 'You agreed to their use on ' + TP.fmt(TP.garmin.consentDate(), '%d %b %Y') + '. ' : ''), h('a', { href: 'garmin-guide.html', target: '_blank', rel: 'noopener' }, 'How to upload your Garmin history'), ' · ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy')),
         h('div', { class: 'form-section' }, 'Start again'),
         h('p', { class: 'small' }, 'Your plan is saved automatically in this browser. Use Save plan first if you want a copy.'),
         h('button', { class: 'btn btn-outline-danger', onclick: function () {

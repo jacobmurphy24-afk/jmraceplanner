@@ -122,6 +122,62 @@
     });
   };
 
+  // --- Consent ---
+  // Heart rate, sleep and HRV are health data (special category data under UK GDPR), so nothing is read
+  // from Garmin until the person explicitly agrees. The agreement is saved with their account (or on
+  // this device without accounts) as users/{uid}/garmin/consent: { health: { version, at } }. Raising
+  // CONSENT_VERSION asks everyone again, so do that whenever the wording below changes what's done.
+  var CONSENT_VERSION = 1, CONSENT = 'consent';
+  function consentDoc() { return TP.mine.get(CONSENT); }
+  G.consentKnown = function () { return TP.mine.ready(CONSENT); };
+  G.consented = function () { var c = consentDoc().health; return !!(c && c.version >= CONSENT_VERSION); };
+  G.consentDate = function () { var c = consentDoc().health; return c ? c.at.slice(0, 10) : null; };
+  function giveConsent() { TP.mine.set(CONSENT, { health: { version: CONSENT_VERSION, at: new Date().toISOString() } }); }
+  // Runs fn now if the person has agreed, otherwise once they agree in the pop-up.
+  G.withConsent = function (fn) {
+    if (G.consented()) return fn();
+    var tick = TP.input('checkbox', ''), ok = h('button', { class: 'btn btn-primary', disabled: true, onclick: function () { giveConsent(); m.close(); fn(); } }, 'Agree and continue');
+    tick.onchange = function () { ok.disabled = !tick.checked; };
+    var cloud = TP.cloud && TP.cloud.enabled && TP.cloud.user;
+    var m = TP.modal({ size: 'm', stack: true, title: h('div', { class: 'md-t' }, 'Using your Garmin health data'),
+      body: [
+        h('p', null, 'To show your training load, fitness, recovery and race readiness, Training Planner reads this from Garmin:'),
+        h('ul', { class: 'small' },
+          h('li', null, 'your activities, with heart rate, power, pace, cadence, elevation, laps and GPS routes, second by second;'),
+          h('li', null, 'sleep, resting heart rate and heart-rate variability (HRV) by day.')),
+        h('p', { class: 'small' }, 'This counts as health data, so it’s only used with your permission. ',
+          h('b', null, 'It’s kept in this browser on this device. '),
+          cloud ? 'Your training thresholds, block reviews and links between sessions and activities are saved to your account so they appear on your other devices. ' : '',
+          'It’s used only for your own analysis. It’s never sold, shared or used for advertising.'),
+        h('p', { class: 'small' }, 'You can withdraw your consent at any time in Settings → Garmin analysis → Withdraw consent, which deletes the Garmin data on this device. ',
+          h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy')),
+        h('label', { class: 'check consent-check' }, tick, 'I agree to Training Planner using my Garmin health data as described above.')],
+      footer: [h('button', { class: 'btn', onclick: function () { m.close(); } }, 'Not now'), ok] });
+  };
+  // Removes the consent record, the API key and everything stored on this device.
+  G.withdrawConsent = function () {
+    G.disconnect(); TP.mine.set(CONSENT, {});
+    return G.clearActs().then(function () { TP.toast('Consent withdrawn. Garmin data on this device has been deleted.'); });
+  };
+  // Garmin data stored before consent was asked for (or before the wording changed): ask once per visit.
+  var askedOnce = false;
+  G.askIfNeeded = function () {
+    if (askedOnce || !G.loaded || !G.acts.length || !G.consentKnown() || G.consented()) return;
+    askedOnce = true;
+    setTimeout(function () { G.withConsent(function () { TP.changed(); }); }, 0);
+  };
+  // Shown in place of the analysis until the person agrees (or deletes the data).
+  function consentPanel() {
+    return h('div', { class: 'panel consent-panel' },
+      h('div', { class: 'panel-h' }, 'Your permission is needed'),
+      h('p', { class: 'small' }, 'There are ' + G.acts.length + ' Garmin activities stored on this device. Heart rate, sleep and HRV are health data, so the analysis needs your permission to use them.'),
+      h('div', { class: 'btn-row' },
+        h('button', { class: 'btn btn-primary', onclick: function () { G.withConsent(function () { TP.changed(); }); } }, 'Review and agree'),
+        h('button', { class: 'btn btn-outline-danger', onclick: function () {
+          TP.confirm('Delete the Garmin activities and sleep data stored on this device? They stay on Garmin.', 'Delete', function () { G.withdrawConsent(); });
+        } }, TP.icon('trash'), 'Delete Garmin data from this device')));
+  }
+
   // --- Activities ---
   function disciplineFor(k) {
     k = (k || '').toLowerCase();
@@ -292,6 +348,7 @@
   // and Garmin's thresholds, and prepare the analysis.
   G.sync = function (from, to, withFit) {
     if (G.syncing) return G.syncing;
+    if (!G.consented()) { G.withConsent(function () { G.sync(from, to, withFit); }); return Promise.resolve(); }
     G.progress = 'Finding activities…';
     var today = TP.today(); if (to > today) to = today;
     G.syncing = search(from, to).then(function (list) {
@@ -332,6 +389,7 @@
   G.refetch = function (id) {
     var a = G.acts.filter(function (x) { return x.id === id; })[0];
     if (!a || !G.connected()) return Promise.reject(new Error('Connect Garmin to load this.'));
+    if (!G.consented()) return Promise.reject(new Error('Agree to Training Planner using your Garmin data (in Analysis) to load this.'));
     return api('/download-service/files/activity/' + id, true).then(unzip).then(function (bytes) {
       var st = parseFit(id, bytes); a.fit = true; a.fitv = FIT_VERSION; delete G.frecs[id];
       return (st ? putAll('streams', [st]) : Promise.resolve()).then(function () { return putAll('acts', [a]); })
@@ -411,6 +469,7 @@
       TP.clear(body);
       try {
         if (!G.loaded) body.appendChild(h('p', { class: 'muted' }, 'Loading…'));
+        else if (G.acts.length && G.consentKnown() && !G.consented()) body.appendChild(consentPanel());
         else if (!G.acts.length) body.appendChild(h('div', { class: 'empty' }, h('h3', null, 'No Garmin activities yet'), h('p', null, G.connected() ? 'Sync from Garmin above. Twelve weeks or more gives the analysis enough to work with.' : 'Connect Garmin above, then sync.')));
         else if (TP.view.gtab === 'Block reviews') TP.blocks.render(body);
         else TP.coach.render(body);
@@ -465,9 +524,11 @@
   function connectCard() {
     var key = TP.input('password', '', { placeholder: 'Paste your Garmin API key', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
     var go = h('button', { class: 'btn btn-primary', onclick: function () {
+      G.withConsent(function () {
       go.disabled = true; go.textContent = 'Connecting…';
       G.connect(key.value).then(function () { TP.toast('Garmin connected.'); TP.changed(); })
         .catch(function (e) { TP.toast(e.message, 'error'); }).finally(function () { go.disabled = false; go.textContent = 'Connect'; });
+      });
     } }, 'Connect');
     var step = function (n, body) { return h('li', null, h('span', { class: 'step-n' }, n), h('div', null, body)); };
     return h('div', { class: 'panel garmin-connect' },

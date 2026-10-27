@@ -134,6 +134,7 @@
     if (job) return job.p;
     files = Array.prototype.slice.call(files || []);
     if (!files.length) return Promise.resolve();
+    if (!G.consented()) { G.withConsent(function () { G.importFiles(files); }); return Promise.resolve(); }
     job = { msg: 'Reading files…', added: 0, matched: 0, skipped: 0, failed: 0, nights: 0 };
     TP.changed();
     var fits = [], jsons = [], index = {}, well = {};
@@ -217,7 +218,7 @@
   G.importCard = function (opts) {
     opts = opts || {};
     var inp = h('input', { type: 'file', accept: '.zip,.fit,application/zip', multiple: true, style: 'display:none', onchange: function () { G.importFiles(inp.files); inp.value = ''; } });
-    var pick = h('button', { class: 'btn btn-primary', disabled: !!job, onclick: function () { inp.click(); } }, TP.icon('upload'), job ? 'Uploading…' : 'Choose your Garmin export');
+    var pick = h('button', { class: 'btn btn-primary', disabled: !!job, onclick: function () { G.withConsent(function () { inp.click(); }); } }, TP.icon('upload'), job ? 'Uploading…' : 'Choose your Garmin export');
     var drop = h('div', { class: 'drop-zone', ondragover: function (e) { e.preventDefault(); drop.classList.add('over'); }, ondragleave: function () { drop.classList.remove('over'); },
       ondrop: function (e) { e.preventDefault(); drop.classList.remove('over'); G.importFiles(e.dataTransfer.files); } },
       inp, pick, h('div', { class: 'muted small' }, 'or drop the .zip (or .fit files) here'));

@@ -8,21 +8,24 @@
   var h = TP.h;
 
   // --- This person's own saved data: users/{uid}/garmin/{name} in the cloud, else this device ---
-  var Mi = TP.mine = { docs: {}, subs: {} };
+  var Mi = TP.mine = { docs: {}, subs: {}, got: {} };
   function cloudOn() { return TP.cloud && TP.cloud.enabled && TP.cloud.user; }
-  Mi.reset = function () { Object.keys(Mi.subs).forEach(function (k) { Mi.subs[k](); }); Mi.subs = {}; Mi.docs = {}; };
+  Mi.reset = function () { Object.keys(Mi.subs).forEach(function (k) { Mi.subs[k](); }); Mi.subs = {}; Mi.docs = {}; Mi.got = {}; };
   Mi.get = function (name) {
     if (Mi.docs[name]) return Mi.docs[name];
     if (cloudOn()) {
       Mi.docs[name] = {};
-      if (!Mi.subs[name]) Mi.subs[name] = TP.cloud.listenMine(name, function (d) { Mi.docs[name] = d || {}; if (TP.garmin) TP.garmin.ver++; TP.changed(); });
+      if (!Mi.subs[name]) Mi.subs[name] = TP.cloud.listenMine(name, function (d) { Mi.docs[name] = d || {}; Mi.got[name] = true; if (TP.garmin) TP.garmin.ver++; TP.changed(); });
     } else {
       try { Mi.docs[name] = JSON.parse(localStorage.getItem('tp-mine-' + name) || '{}'); } catch (e) { Mi.docs[name] = {}; }
+      Mi.got[name] = true;
     }
     return Mi.docs[name];
   };
+  // Whether the saved copy has arrived yet (from the cloud it comes a moment after the first get).
+  Mi.ready = function (name) { Mi.get(name); return !!Mi.got[name]; };
   Mi.set = function (name, data) {
-    Mi.docs[name] = data; if (TP.garmin) TP.garmin.ver++;
+    Mi.docs[name] = data; Mi.got[name] = true; if (TP.garmin) TP.garmin.ver++;
     if (cloudOn()) TP.cloud.saveMine(name, data);
     else try { localStorage.setItem('tp-mine-' + name, JSON.stringify(data)); } catch (e) {}
     TP.changed();

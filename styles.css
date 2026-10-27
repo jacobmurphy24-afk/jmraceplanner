@@ -240,6 +240,8 @@ body.md-open { overflow: hidden; }
 .sess-head .form-section { margin-bottom: 8px; }
 .sess-head-l { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
 .sess-head-l .check { min-height: 0; padding-bottom: 8px; font-size: 0.8rem; }
+.consent-check { align-self: auto; align-items: flex-start; min-height: 0; margin-top: 14px; }
+.consent-check input { flex: none; margin-top: 1px; }
 .sess-head .seg { margin-bottom: 6px; }
 .est .est-v { font-size: 1.2rem; margin-left: 6px; }
 .brick-row { display: grid; grid-template-columns: 60px 1fr 1fr; gap: 10px; align-items: end; } .brick-row + .brick-row { margin-top: 8px; }
