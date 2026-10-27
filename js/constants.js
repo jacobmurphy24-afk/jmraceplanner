@@ -112,10 +112,10 @@ window.TP = window.TP || {};
   var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   TP.MONTHS = MONTHS;
-  // Format codes follow R's strftime: %d %b %B %Y %a %A %e.
+  // Format codes follow R's strftime: %d %b %B %Y %y %a %A %e.
   TP.fmt = function (s, f) {
     var d = typeof s === 'string' ? TP.parse(s) : s;
-    return f.replace(/%[dbBYaAem]/g, function (k) {
+    return f.replace(/%[dbBYyaAem]/g, function (k) {
       switch (k) {
         case '%d': return String(d.getDate()).padStart(2, '0');
         case '%e': return String(d.getDate());
@@ -123,6 +123,7 @@ window.TP = window.TP || {};
         case '%b': return MONTHS[d.getMonth()].slice(0, 3);
         case '%B': return MONTHS[d.getMonth()];
         case '%Y': return String(d.getFullYear());
+        case '%y': return String(d.getFullYear()).slice(2);
         case '%a': return DAYS[d.getDay()].slice(0, 3);
         case '%A': return DAYS[d.getDay()];
       }

@@ -94,7 +94,7 @@
       var sy2 = function (v) { var f = (v - r0) / (r1 - r0); return T + (Y2.invert ? f : 1 - f) * ph; };
       var s = '';
       if (Y.label) s += '<text x="' + L + '" y="11" class="ax-l">' + esc(Y.label) + '</text>';
-      if (Y2.label) s += '<text x="' + (W - R) + '" y="11" text-anchor="end" class="ax-l" fill="' + (right[0] ? right[0].col : '#777') + '">' + esc(Y2.label) + '</text>';
+      if (Y2.label && right.length) s += '<text x="' + (W - R) + '" y="11" text-anchor="end" class="ax-l" fill="' + (right[0] ? right[0].col : '#777') + '">' + esc(Y2.label) + '</text>';
       var rcol = right[0] ? right[0].col : '#777';
       yt2.forEach(function (v) { s += '<text x="' + (W - R + 5) + '" y="' + (sy2(v) + 3.5) + '" class="ax" style="fill:' + rcol + '">' + esc(fy2(v)) + '</text>'; });
       (o.bands || []).forEach(function (b) {

@@ -96,6 +96,10 @@
         })() : h('div', { class: 'legend small' }, z.map(function (v, i) { return h('span', null, h('i', { style: 'background:' + A.ZONE_COLOURS[i] }), ZONE_NAMES[i] + ': ' + mins(v)); }))));
     }
 
+    // Hills
+    if (main && f.hills && f.hills.noisy) root.appendChild(h('div', null, section('Hills', 'The altitude in this file is too noisy to break down into climbs (it’s probably from GPS rather than a barometer). The total climb above is the watch’s own figure.')));
+    else if (main && f.hills && !f.hills.flat && (main.discipline === 'Run' || main.discipline === 'Bike')) hills(root, f.hills, main.discipline, a.elev_m);
+
     // Planned session
     root.appendChild(h('div', null, section('Planned session')));
     var sid = M.sessionForAct(id), ps = sid && TP.state.sessions.filter(function (x) { return x.id === sid; })[0];
@@ -141,7 +145,7 @@
     }
     if (!a.fit) chartBox.appendChild(h('p', { class: 'muted small' }, 'Sync with FIT files to see heart rate, pace, power, the route and the session’s structure.'));
     else G.stream(id).then(function (raw) {
-      drawStreams(chartBox, a, raw, s, rows.length > 1);
+      drawStreams(chartBox, a, raw, s, rows.length > 1, f.hills && f.hills.climbs);
       drawRoute(mapBox, a, raw, col);
       tables(structBox, s, main ? main.discipline : a.sport);
     }).catch(function (e) { console.warn(e); chartBox.appendChild(h('p', { class: 'muted small' }, 'The data for this activity couldn’t be read.')); });
@@ -163,6 +167,63 @@
       else root.appendChild(h('p', { class: 'muted small' }, 'No similar sessions ' + (cx.inBlock ? 'in this block' : 'in the 12 weeks around it') + ' yet.'));
     }
   };
+
+  // How the activity went on the hills: terrain, effort uphill against the flat, and each climb.
+  function hills(root, hf, disc, watchAscent) {
+    var asc = watchAscent > 0 ? watchAscent : hf.ascent;   // the watch's total (usually barometric) when there is one
+    var run = disc === 'Run', bands = hf.bands || [], tot = A.sum(bands.map(function (b) { return b.time_s; })) || 1;
+    var pace = function (v) { return fin(v) && v > 0 ? (run ? A.fmtPace(1000 / v) + ' /km' : TP.round(v * 3.6, 1) + ' km/h') : '–'; };
+    var pct = function (x) { return Math.round(x * 100) + '%'; }, upF = hf.up || {}, flF = hf.level || {};
+    root.appendChild(h('div', null, section('Hills', run ? 'Grade-adjusted pace (GAP) is the flat-ground pace for the same effort, so uphill and flat running can be compared directly.'
+      : 'VAM is metres climbed an hour on the climbs: the standard measure of climbing speed on a bike.')));
+    root.appendChild(h('div', { class: 'kpis kpis-4' },
+      kpi(TP.fmtElev(asc), 'Climbed', Math.abs(hf.ascent - asc) <= 0.15 * asc ? TP.fmtElev(hf.descent) + ' descent' : 'watch total'),
+      kpi(fin(hf.max_grade) ? pct(hf.max_grade) : '–', 'Steepest gradient', 'over ' + (run ? '40' : '80') + ' m or more'),
+      kpi(hf.climb_s ? TP.fmtDuration(hf.climb_s) : '–', 'Time going uphill', pct(hf.climb_s / tot) + ' of the moving time'),
+      run ? kpi(fin(upF.gap) ? pace(upF.gap) : '–', 'Uphill effort (GAP)', fin(flF.gap) ? 'flat ' + pace(flF.gap) : null)
+        : kpi(fin(hf.vam) ? Math.round(hf.vam).toLocaleString('en-GB') + ' m/h' : '–', 'VAM on climbs', hf.climbs && hf.climbs.length ? hf.climbs.length + (hf.climbs.length === 1 ? ' climb' : ' climbs') : 'no sustained climbs')));
+    // What the numbers say about how it was paced.
+    var notes = [];
+    if (fin(upF.hr) && fin(flF.hr)) {
+      var dh = upF.hr - flF.hr;
+      notes.push(Math.abs(dh) < 3 ? sp('Heart rate was about the same uphill (%.0f bpm) as on the flat: an even effort.', upF.hr)
+        : sp('Heart rate was %.0f bpm %s uphill (%.0f) than on the flat (%.0f).', Math.abs(dh), dh > 0 ? 'higher' : 'lower', upF.hr, flF.hr));
+    }
+    if (run && fin(upF.gap) && fin(flF.gap) && flF.gap > 0) {
+      var r = upF.gap / flF.gap - 1;
+      notes.push(r > 0.04 ? sp('You pushed harder uphill: grade-adjusted pace was %.0f%% quicker than on the flat. Fine in training; in a race it tends to cost you later.', r * 100)
+        : r < -0.06 ? sp('You eased off on the climbs: grade-adjusted pace was %.0f%% slower than on the flat. Hill sessions build strength when the effort stays up.', -r * 100)
+        : 'Effort stayed even on the climbs: grade-adjusted pace uphill matched the flat.');
+    }
+    if (!run && fin(upF.power) && fin(flF.power) && flF.power > 20) {
+      var rp = upF.power / flF.power - 1;
+      notes.push(sp('Power uphill averaged %.0f W against %.0f W on the flat (%+.0f%%).', upF.power, flF.power, rp * 100) + (rp > 0.25 ? ' Big surges on climbs cost more energy than holding a steady effort.' : ''));
+    }
+    if (notes.length) root.appendChild(h('ul', { class: 'flist small' }, notes.map(function (x) { return h('li', null, x); })));
+    var hasP = bands.some(function (b) { return fin(b.power); }), hasHr = bands.some(function (b) { return fin(b.hr); });
+    root.appendChild(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
+      h('thead', null, h('tr', null, h('th', null, 'Terrain'), h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, 'Distance'), h('th', { class: 'num' }, run ? 'Pace' : 'Speed'),
+        run ? h('th', { class: 'num' }, 'GAP') : null, hasP ? h('th', { class: 'num' }, 'Power') : null, hasHr ? h('th', { class: 'num' }, 'Avg HR') : null)),
+      h('tbody', null, bands.filter(function (b) { return b.time_s >= 10; }).map(function (b) {
+        var g = A.GRADE_BANDS.filter(function (x) { return x.name === b.name; })[0];
+        return h('tr', null, h('td', null, h('b', null, b.name), h('span', { class: 'muted small' }, ' ' + g.label)), h('td', { class: 'num' }, A.fmtDur(b.time_s)),
+          h('td', { class: 'num' }, (b.dist_m / 1000).toFixed(1) + ' km'), h('td', { class: 'num' }, pace(b.speed)), run ? h('td', { class: 'num' }, h('b', null, pace(b.gap))) : null,
+          hasP ? h('td', { class: 'num' }, fin(b.power) ? Math.round(b.power) + ' W' : '–') : null, hasHr ? h('td', { class: 'num' }, fin(b.hr) ? Math.round(b.hr) : '–') : null);
+      })))));
+    var cl = hf.climbs || [];
+    if (!cl.length) return;
+    root.appendChild(h('div', null, section('Climbs', 'Each sustained climb, in order. Shaded orange on the elevation chart above.')));
+    root.appendChild(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
+      h('thead', null, h('tr', null, h('th', null, '#'), h('th', { class: 'num' }, 'Starts'), h('th', { class: 'num' }, 'Length'), h('th', { class: 'num' }, 'Climb'), h('th', { class: 'num' }, 'Gradient'),
+        h('th', { class: 'num' }, 'Time'), h('th', { class: 'num' }, run ? 'GAP' : 'VAM'), !run && cl.some(function (c) { return fin(c.power); }) ? h('th', { class: 'num' }, 'Power') : null, h('th', { class: 'num' }, 'Avg HR'))),
+      h('tbody', null, cl.map(function (c, k) {
+        return h('tr', null, h('td', null, k + 1), h('td', { class: 'num' }, Math.round(c.start_s / 60) + ' min in'), h('td', { class: 'num' }, c.dist_m >= 1000 ? (c.dist_m / 1000).toFixed(1) + ' km' : c.dist_m + ' m'),
+          h('td', { class: 'num' }, h('b', null, TP.fmtElev(c.gain_m))), h('td', { class: 'num' }, pct(c.grade) + (fin(c.max_grade) && c.max_grade > c.grade + 0.02 ? ' (max ' + pct(c.max_grade) + ')' : '')),
+          h('td', { class: 'num' }, A.fmtDur(c.dur_s)), h('td', { class: 'num' }, run ? pace(c.gap) : Math.round(c.vam).toLocaleString('en-GB') + ' m/h'),
+          !run && cl.some(function (x) { return fin(x.power); }) ? h('td', { class: 'num' }, fin(c.power) ? Math.round(c.power) + ' W' : '–') : null,
+          h('td', { class: 'num' }, fin(c.hr) ? Math.round(c.hr) : '–'));
+      })))));
+  }
 
   // Save an activity as a template, or add it to the planner on a date (as the R app's Save button).
   TP.saveActivity = function (rowId, type) {
@@ -263,7 +324,7 @@
 
   // Charts through the activity: output (pace / speed / power) with the session's parts shaded, then heart
   // rate and elevation - separate charts, one scale each.
-  function drawStreams(root, a, raw, s, multi) {
+  function drawStreams(root, a, raw, s, multi, climbs) {
     var disc = multi ? 'Other' : A.discFor(a.type), st = A.cleanStream(raw, disc);
     if (!st) { root.appendChild(h('p', { class: 'muted small' }, 'Not enough recorded data to chart.')); return; }
     root.appendChild(h('div', null, section('Through the session', s && s.segments && s.segments.length > 1 ? 'Shading shows the parts of the session: warm-up and cool-down grey, work red, recovery blue.' : null)));
@@ -296,7 +357,8 @@
     if (main) root.appendChild(TP.chart.xy({ title: main.title, height: 220, x: xAxis, tipX: tipX, bands: bands, y: main.y, y2: y2, series: [main.s].concat(hrS ? [hrS] : []) }));
     else if (hr) root.appendChild(TP.chart.xy({ title: 'Heart rate (bpm)', height: 160, x: xAxis, tipX: tipX, bands: bands, y: { fmt: function (v) { return Math.round(v); } },
       series: [{ name: 'Heart rate (bpm)', col: '#d6336c', pts: pts(hr), width: 1.5 }] }));
-    if (alt && disc !== 'Swim') root.appendChild(TP.chart.xy({ title: 'Elevation (m)', height: 110, x: xAxis, tipX: tipX, y: { fmt: function (v) { return Math.round(v); } },
+    if (alt && disc !== 'Swim') root.appendChild(TP.chart.xy({ title: 'Elevation (m)' + (climbs && climbs.length ? ' · climbs shaded' : ''), height: 110, x: xAxis, tipX: tipX, y: { fmt: function (v) { return Math.round(v); } },
+      bands: (climbs || []).map(function (c) { return { x0: mins(c.start_s), x1: mins(c.start_s + c.dur_s), fill: '#ffe7d1' }; }),
       series: [{ name: 'Elevation (m)', col: '#8a8a8a', pts: pts(alt), width: 1.2, kind: 'area', fillAlpha: 0.2 }] }));
     // Pool swims: pace of each set.
     if (s && s.unit === 'swim' && s.segments && s.segments.length) {

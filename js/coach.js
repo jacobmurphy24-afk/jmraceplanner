@@ -54,6 +54,7 @@
     if (perfRow.children.length) root.appendChild(perfRow);
     if (r.best_efforts) root.appendChild(runPerf(r));
     if (r.ef.data.length) root.appendChild(efChart(r));
+    var hl = hillsPanel(r, ctx); if (hl) root.appendChild(hl);
     var rec = recovery(ctx.wellness, per.from, per.to); if (rec) root.appendChild(rec);
     if (r.compliance) root.appendChild(compliance(r.compliance));
     root.appendChild(h('p', { class: 'hint' }, 'Thresholds used: FTP ' + ctx.prof.ftp + ' W · threshold pace ' + A.fmtPace(ctx.prof.thr_pace_s_km) + ' /km · CSS ' + A.fmtPace(ctx.prof.css_s_100) + ' /100 m · threshold HR ' + ctx.prof.lthr + ' bpm. Check or change them in Settings → Training thresholds.'));
@@ -103,7 +104,7 @@
         var x = rows.filter(function (y) { return y.discipline === d && (y.kind || 'Done') === kind; }); if (!x.length) return;
         var wk = {}; x.forEach(function (y) { wk[y.week] = (wk[y.week] || 0) + y[metric]; });
         series.push({ name: d + (kind === 'Planned' ? ' (planned)' : ''), noLegend: kind === 'Planned', col: CO.sportCol(d), kind: 'bar', stack: true, barW: 5, alpha: kind === 'Planned' ? 0.35 : null,
-          pts: Object.keys(wk).sort().map(function (k) { return [TP.addDays(k, 3), wk[k]]; }), fmt: function (v) { return metric === 'hours' ? v.toFixed(1) + ' h' : Math.round(v) + ' TSS'; } });
+          pts: Object.keys(wk).sort().map(function (k) { return [TP.addDays(k, 3), wk[k]]; }), fmt: function (v) { return metric === 'hours' ? v.toFixed(1) + ' h' : metric === 'climb' ? TP.fmtElev(v) : Math.round(v) + ' TSS'; } });
       });
     });
     // opts.fitness: daily load rows; fitness (CTL) at the end of each week is drawn as a line on the right-hand scale.
@@ -301,6 +302,71 @@
     if (r.ef.trends.length) p.appendChild(h('div', { class: 'small' }, r.ef.trends.map(function (t) { return sp('%s: %+.1f%% per 4 weeks over %d sessions', t.discipline, t.pct_per_4wk, t.n); }).join(' · ')));
     return p;
   }
+  // --- Hills: climbing each week, whether climbing is getting stronger, and the hilliest sessions ---
+  function hillsPanel(r, ctx) {
+    var acts = r.acts.filter(function (a) { return a.discipline === 'Run' || a.discipline === 'Bike'; });
+    var climb = function (a) { return a.elev_gain_m > 0 ? a.elev_gain_m : 0; }, total = A.sum(acts.map(climb));
+    if (total < 100) return null;
+    var nW = Math.max(1, (TP.daysBetween(r.from, r.to) + 1) / 7), hf = function (a) { var f = ctx.feats[a.id]; return f && f.hills && !f.hills.flat && !f.hills.noisy ? f.hills : null; };
+    var p = panel('Hills', 'How much your runs and rides climbed, and how strong you are on the climbs.');
+    p.appendChild(h('div', { class: 'kpis kpis-4', style: 'margin-top:8px' }, ['Run', 'Bike'].map(function (d) {
+      var x = acts.filter(function (a) { return a.discipline === d; }), t = A.sum(x.map(climb)); if (!x.length) return null;
+      var hilly = x.filter(function (a) { return climb(a) >= (d === 'Run' ? 150 : 500); }).length;
+      return [kpi(TP.fmtElev(t), d === 'Run' ? 'Climbed running' : 'Climbed riding', TP.fmtElev(t / nW) + ' a week'),
+        kpi(hilly + ' of ' + x.length, d === 'Run' ? 'Hilly runs' : 'Hilly rides', d === 'Run' ? '150 m or more' : '500 m or more')];
+    })));
+    var rows = acts.map(function (a) { return { week: a.week, discipline: a.discipline, climb: climb(a) }; });
+    p.appendChild(h('div', { class: 'lbl', style: 'margin-top:10px' }, 'Climbing each week'));
+    p.appendChild(CO.weeklyChart(rows, 'climb', { height: 170 }));
+    // Hill fitness: output per heartbeat on the climbs (grade-adjusted pace for runs, power for rides),
+    // from sessions with at least 5 minutes uphill. Rising means stronger on hills at the same effort.
+    var series = [], notes = [];
+    ['Run', 'Bike'].forEach(function (d) {
+      var pts = acts.filter(function (a) { return a.discipline === d; }).map(function (a) {
+        var x = hf(a); if (!x || x.climb_s < 300 || !fin(x.up.hr) || x.up.hr < 80) return null;
+        var v = d === 'Run' ? (fin(x.up.gap) ? x.up.gap * 60 / x.up.hr : null) : (fin(x.up.power) ? x.up.power / x.up.hr : null);
+        return fin(v) ? [a.date, v] : null;
+      }).filter(Boolean);
+      if (pts.length < 3) return;
+      series.push({ name: d, col: CO.sportCol(d), kind: 'dots', r: 4, pts: pts, fmt: function (v) { return v.toFixed(2); } });
+      var xs = pts.map(function (q) { return C.dnum(q[0]); }), ys = pts.map(function (q) { return q[1]; }), mx = A.mean(xs), my = A.mean(ys), sxx = 0, sxy = 0;
+      xs.forEach(function (x, i) { sxx += (x - mx) * (x - mx); sxy += (x - mx) * (ys[i] - my); });
+      if (sxx > 0 && pts.length >= 4) {
+        var slope = sxy / sxx, d0 = pts[0][0], d1 = pts[pts.length - 1][0];
+        series.push({ name: d + ' trend', col: CO.sportCol(d), dash: '6 4', width: 1.6, hideTip: true, noLegend: true, pts: [[d0, my + slope * (C.dnum(d0) - mx)], [d1, my + slope * (C.dnum(d1) - mx)]] });
+        var pct4 = slope * 28 / my * 100;
+        notes.push(sp('%s: %+.1f%% per 4 weeks over %d hilly sessions', d === 'Run' ? 'Running uphill' : 'Riding uphill', pct4, pts.length) + (Math.abs(pct4) < 1 ? ' (steady).' : pct4 > 0 ? ' (getting stronger).' : ' (dropping).'));
+      }
+    });
+    if (series.length) {
+      p.appendChild(h('div', { class: 'lbl', style: 'margin-top:10px' }, 'Hill fitness'));
+      p.appendChild(h('div', { class: 'muted small' }, 'Output per heartbeat on the climbs: grade-adjusted pace for runs, power for rides. Each dot is a session with 5 minutes or more uphill; higher means stronger on hills.'));
+      p.appendChild(C.xy({ height: 180, x: { type: 'date' }, y: { fmt: function (v) { return v.toFixed(2); } }, series: series }));
+      if (notes.length) p.appendChild(h('div', { class: 'small' }, notes.join(' · ')));
+    }
+    // Bike climbing speed: VAM on each ride's climbs.
+    var vam = acts.filter(function (a) { return a.discipline === 'Bike'; }).map(function (a) { var x = hf(a); return x && fin(x.vam) && x.climbs.length ? [a.date, x.vam] : null; }).filter(Boolean);
+    if (vam.length >= 3) {
+      p.appendChild(h('div', { class: 'lbl', style: 'margin-top:10px' }, 'Climbing speed on the bike (VAM)'));
+      p.appendChild(C.xy({ height: 150, x: { type: 'date' }, y: { fmt: function (v) { return Math.round(v); }, label: 'm/h' },
+        series: [{ name: 'VAM', col: CO.sportCol('Bike'), kind: 'dots', r: 4, pts: vam, fmt: function (v) { return Math.round(v) + ' m/h'; } }] }));
+    }
+    var top = acts.slice().sort(function (a, b) { return climb(b) - climb(a); }).filter(function (a) { return climb(a) >= 50; }).slice(0, 5);
+    if (top.length) {
+      p.appendChild(h('div', { class: 'lbl', style: 'margin-top:10px' }, 'Hilliest sessions'));
+      p.appendChild(h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
+        h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Session'), h('th', { class: 'num' }, 'Distance'), h('th', { class: 'num' }, 'Climbed'), h('th', { class: 'num' }, 'Climbs'), h('th', { class: 'num' }, 'Uphill'))),
+        h('tbody', null, top.map(function (a) {
+          var x = hf(a);
+          return h('tr', { class: 'click', onclick: function () { TP.activityView(a.parent_id || a.id); } },
+            h('td', { class: 'nowrap' }, TP.fmt(a.date, '%a %d %b')), h('td', null, h('span', { class: 'sdot', style: 'background:' + CO.sportCol(a.discipline) }), a.name),
+            h('td', { class: 'num' }, a.km ? TP.round(a.km, 1) + ' km' : '–'), h('td', { class: 'num' }, h('b', null, TP.fmtElev(climb(a)))),
+            h('td', { class: 'num' }, x ? x.climbs.length : '–'), h('td', { class: 'num' }, x && x.climb_s ? TP.fmtDuration(x.climb_s) : '–'));
+        })))));
+    }
+    return p;
+  }
+
   // --- Sleep and HRV ---
   CO.recoveryCharts = function (w, from, to, opts) {
     opts = opts || {};

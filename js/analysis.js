@@ -8,7 +8,7 @@
 // Pure functions only: no page code here. Dates are 'YYYY-MM-DD' strings.
 (function (TP) {
   var A = TP.TA = {};
-  A.FEATURE_VERSION = 4;
+  A.FEATURE_VERSION = 5;   // 5: hills (gradient bands and climbs) for runs and rides
   var MMP_D = A.MMP_DURATIONS = [5, 10, 15, 30, 60, 120, 180, 300, 480, 600, 720, 1200, 1800, 2700, 3600, 5400, 7200];
   var RUN_D = A.RUN_DURATIONS = [30, 60, 120, 180, 300, 480, 600, 720, 1200, 1800, 2700, 3600];
   var BIKE_SPD_D = [600, 1200, 1800, 3600, 5400, 7200, 10800, 14400, 18000];
@@ -199,6 +199,73 @@
     });
   }
   function tabulate(vals, nb, bin) { var h = new Array(nb).fill(0); vals.forEach(function (v) { if (fin(v)) h[Math.min(Math.max(bin(v), 1), nb) - 1]++; }); return h; }
+
+  // Hills: how much a run or ride climbed, how speed, power and heart rate changed with the gradient, and
+  // each sustained climb. GPS altitude has metres of noise and the odd wild glitch, so glitches are replaced
+  // with the local median (over ±45 s running / ±30 s riding, then ±15 s), the result is smoothed over 31 s,
+  // and gradients are only read over stretches that covered enough ground (40 m running, 80 m riding).
+  // watchAscent: the watch's own total; a file that climbs far more than it is too noisy to break down.
+  A.GRADE_BANDS = [{ name: 'Downhill', label: 'below −3%' }, { name: 'Flat', label: '−3% to 3%' }, { name: 'Uphill', label: '3% to 6%' }, { name: 'Steep', label: 'over 6%' }];
+  A.hillFeatures = function (st, disc, watchAscent) {
+    var n = st.n, W = 15;
+    if (n < 300 || st.altitude.filter(fin).length < n * 0.5 || st.distance.filter(fin).length < n * 0.5) return null;
+    var alt = locfNocb(st.altitude), dist = locfNocb(st.distance), s = 0, i, k, win = [];
+    function despike(x, half, lim) {
+      return x.map(function (v, j) {
+        win.length = 0; for (k = Math.max(0, j - half); k <= Math.min(n - 1, j + half); k++) win.push(x[k]);
+        win.sort(function (p, q) { return p - q; }); var med = win[win.length >> 1];
+        return Math.abs(v - med) > lim ? med : v;
+      });
+    }
+    alt = despike(despike(alt, disc === 'Bike' ? 30 : 45, disc === 'Bike' ? 40 : 30), W, 10);
+    var altS = alt.slice();
+    for (i = 0; i < n; i++) { s += alt[i]; if (i >= 2 * W + 1) s -= alt[i - 2 * W - 1]; if (i >= 2 * W) altS[i - W] = s / (2 * W + 1); }
+    var minD = disc === 'Bike' ? 80 : 40, grade = new Array(n).fill(null);
+    for (i = W; i < n - W; i++) { var dr = dist[i + W] - dist[i - W]; if (dr > minD) grade[i] = Math.max(Math.min((altS[i + W] - altS[i - W]) / dr, 0.25), -0.25); }
+    // Ascent and descent, counting only changes of 2 m or more so leftover noise doesn't add up.
+    var up = 0, down = 0, ref = altS[0];
+    for (i = 1; i < n; i++) { var dd = altS[i] - ref; if (dd >= 2) { up += dd; ref = altS[i]; } else if (dd <= -2) { down -= dd; ref = altS[i]; } }
+    if (up < 10 && down < 10) return { ascent: Math.round(up), descent: Math.round(down), flat: true };
+    if (watchAscent > 0 && up > 1.8 * watchAscent + 40) return { ascent: Math.round(up), descent: Math.round(down), noisy: true };
+    var gap = disc === 'Run' ? gapSeries(st) : null;
+    var B = A.GRADE_BANDS.map(function () { return { s: 0, m: 0, hr: [], pw: [], gap: [] }; });
+    for (i = 0; i < n; i++) {
+      var g = grade[i]; if (g === null) continue;
+      var b = B[g < -0.03 ? 0 : g < 0.03 ? 1 : g < 0.06 ? 2 : 3];
+      b.s++; if (fin(st.speed[i])) b.m += st.speed[i]; if (fin(st.hr[i])) b.hr.push(st.hr[i]);
+      if (disc === 'Bike') b.pw.push(fin(st.power[i]) ? st.power[i] : null); if (gap) b.gap.push(gap[i]);
+    }
+    var bands = B.map(function (b, k) {
+      return { name: A.GRADE_BANDS[k].name, time_s: b.s, dist_m: Math.round(b.m), speed: b.s ? b.m / b.s : null, hr: mean(b.hr), power: disc === 'Bike' && b.pw.filter(fin).length > b.s * 0.5 ? mean(b.pw.map(function (v) { return fin(v) ? v : 0; })) : null, gap: gap ? mean(b.gap) : null };
+    });
+    // Sustained climbs: from a low point to the top, ending once the road drops 5 m (running) / 10 m (riding) below it.
+    var minGain = disc === 'Bike' ? 40 : 20, drop = disc === 'Bike' ? 10 : 5, climbs = [], lo = 0, hi = 0;
+    function climb(a, z) {
+      // Start where the road actually starts rising, not on the flat before it.
+      while (a < z && altS[a + 1] - altS[a] < 0.02) a++;
+      var gain = altS[z] - altS[a], len = dist[z] - dist[a], dur = z - a;
+      // Faster than about 1,500 m an hour running or 2,200 riding is a glitch, not a climb.
+      if (gain < minGain || !(len > 0) || gain / len < 0.025 || gain / len > 0.3 || dur < 30 || gain / dur * 3600 > (disc === 'Bike' ? 2200 : 1500)) return;
+      var pw = disc === 'Bike' ? st.power.slice(a, z + 1) : [];
+      climbs.push({ start_s: a, dur_s: dur, dist_m: Math.round(len), gain_m: Math.round(gain), grade: gain / len, max_grade: max(grade.slice(a, z + 1)),
+        speed: len / dur, vam: gain / dur * 3600, hr: mean(st.hr.slice(a, z + 1)), power: pw.filter(fin).length > dur * 0.5 ? mean(pw.map(function (v) { return fin(v) ? v : 0; })) : null,
+        gap: gap ? mean(gap.slice(a, z + 1)) : null });
+    }
+    for (i = 1; i < n; i++) {
+      if (altS[i] < altS[lo]) { if (hi > lo) climb(lo, hi); lo = hi = i; continue; }
+      if (altS[i] > altS[hi]) hi = i;
+      else if (altS[hi] - altS[i] > drop) { climb(lo, hi); lo = hi = i; }
+    }
+    if (hi > lo) climb(lo, hi);
+    var cl = climbs.length ? climbs : [], onClimbs = sum(cl.map(function (c) { return c.dur_s; }));
+    var upB = [bands[2], bands[3]], upS = upB[0].time_s + upB[1].time_s, wavg = function (key) {
+      var t = 0, w = 0; upB.forEach(function (b) { if (fin(b[key]) && b.time_s) { t += b[key] * b.time_s; w += b.time_s; } }); return w ? t / w : null;
+    };
+    return { ascent: Math.round(up), descent: Math.round(down), max_grade: max(grade), bands: bands, climb_s: upS,
+      climbs: cl.sort(function (x, y) { return y.gain_m - x.gain_m; }).slice(0, 12).sort(function (x, y) { return x.start_s - y.start_s; }),
+      vam: onClimbs > 0 ? sum(cl.map(function (c) { return c.gain_m; })) / onClimbs * 3600 : null,
+      up: { hr: wavg('hr'), power: wavg('power'), gap: wavg('gap'), speed: wavg('speed') }, level: { hr: bands[1].hr, power: bands[1].power, gap: bands[1].gap, speed: bands[1].speed } };
+  };
 
   // Threshold-independent features for one activity (cached, so a threshold change re-scores instantly).
   A.streamFeatures = function (st, disc) {
@@ -575,6 +642,7 @@
     var disc = A.discFor(a.type), rec = { id: a.id, v: A.FEATURE_VERSION, f: null, legs: null };
     var st = A.cleanStream(raw, disc), meta = { discipline: disc, pool_length_m: a.pool_m };
     rec.f = st ? A.streamFeatures(st, disc) : { moving_s: null };
+    if (st && (disc === 'Run' || disc === 'Bike')) rec.f.hills = A.hillFeatures(st, disc, a.elev_m);
     if (raw && raw.lengths && raw.lengths.length) rec.f.lengths = raw.lengths.map(function (l) { return l.dur; });
     if (!(raw && raw.legs && raw.legs.length > 1)) {
       try { rec.f.structure = A.sessionStructure(st, meta, raw && raw.laps, raw && raw.lengths); } catch (e) { rec.f.structure = null; }
@@ -613,7 +681,7 @@
       if (!a.date) return;
       var disc = A.discFor(a.type), fr = frecs[a.id];
       var row = { id: a.id, name: a.name || a.type, type_key: a.type || '', discipline: disc, sport: a.sport, date: a.date, start_local: a.start,
-        duration_s: a.duration_s, moving_s: a.moving_s, distance_m: a.distance_m, elev_gain_m: a.elev_m, avg_hr: a.avg_hr, max_hr: a.max_hr,
+        duration_s: a.duration_s, moving_s: a.moving_s, distance_m: a.distance_m, elev_gain_m: a.elev_m > 0 ? a.elev_m : fr && fr.f && fr.f.hills ? fr.f.hills.ascent : a.elev_m, avg_hr: a.avg_hr, max_hr: a.max_hr,
         avg_power: a.avg_power, np: a.np, garmin_tss: a.tss, vo2max: a.vo2max, aerobic_te: a.aerobic_te, anaerobic_te: a.anaerobic_te,
         pool_length_m: a.pool_m, swim_env: disc === 'Swim' ? swimEnv(a.type) : null, parent_id: null, group_label: null };
       if (fr && fr.legs) {
